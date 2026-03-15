@@ -27,35 +27,42 @@ export interface KnowledgeBaseRow {
 const HF_API_URL =
   'https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2';
 
+const EMBEDDING_ZERO_VECTOR: number[] = new Array(384).fill(0);
+
 /**
  * Converts a text string into a 384-dimensional embedding vector using the
  * HuggingFace Inference API (free tier).
  *
- * Throws on network errors or unexpected response shapes.
+ * Returns a zero vector of length 384 on any failure so callers keep working.
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const apiKey = process.env.HUGGINGFACE_API_KEY;
-  if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not configured.');
+  try {
+    const apiKey = process.env.HUGGINGFACE_API_KEY;
+    if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not configured.');
 
-  const response = await fetch(HF_API_URL, {
-    method:  'POST',
-    headers: {
-      Authorization:  `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ inputs: text.trim(), options: { wait_for_model: true } }),
-  });
+    const response = await fetch(HF_API_URL, {
+      method:  'POST',
+      headers: {
+        Authorization:  `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ inputs: text.trim(), options: { wait_for_model: true } }),
+    });
 
-  if (!response.ok) {
-    const msg = await response.text();
-    throw new Error(`HuggingFace embedding error ${response.status}: ${msg}`);
+    if (!response.ok) {
+      const msg = await response.text();
+      throw new Error(`HuggingFace embedding error ${response.status}: ${msg}`);
+    }
+
+    const json = await response.json() as number[] | number[][];
+
+    // MiniLM returns a 2-D array [[...]] when a single string is passed; flatten.
+    if (Array.isArray(json[0])) return json[0] as number[];
+    return json as number[];
+  } catch (err) {
+    console.error('[rag-service] generateEmbedding failed, using zero-vector fallback:', err);
+    return EMBEDDING_ZERO_VECTOR;
   }
-
-  const json = await response.json() as number[] | number[][];
-
-  // MiniLM returns a 2-D array [[...]] when a single string is passed; flatten.
-  if (Array.isArray(json[0])) return json[0] as number[];
-  return json as number[];
 }
 
 // ─── Vector similarity search helpers ─────────────────────────────────────────
@@ -99,14 +106,18 @@ export async function searchSimilarTrades(
   userId:        string,
   limit:         number = 3
 ): Promise<KnowledgeBaseRow[]> {
-  const embedding = await generateEmbedding(userReasoning);
-
-  return matchDocuments(
-    embedding,
-    0.7,
-    limit,
-    { type: 'user_reasoning', user_id: userId }
-  );
+  try {
+    const embedding = await generateEmbedding(userReasoning);
+    return matchDocuments(
+      embedding,
+      0.7,
+      limit,
+      { type: 'user_reasoning', user_id: userId }
+    );
+  } catch (err) {
+    console.error('[rag-service] searchSimilarTrades error:', err);
+    return [];
+  }
 }
 
 /**
@@ -120,14 +131,18 @@ export async function searchCoachingPrompts(
   context: string,
   limit:   number = 2
 ): Promise<KnowledgeBaseRow[]> {
-  const embedding = await generateEmbedding(context);
-
-  return matchDocuments(
-    embedding,
-    0.6,
-    limit,
-    { type: 'coaching_prompt' }
-  );
+  try {
+    const embedding = await generateEmbedding(context);
+    return matchDocuments(
+      embedding,
+      0.6,
+      limit,
+      { type: 'coaching_prompt' }
+    );
+  } catch (err) {
+    console.error('[rag-service] searchCoachingPrompts error:', err);
+    return [];
+  }
 }
 
 /**

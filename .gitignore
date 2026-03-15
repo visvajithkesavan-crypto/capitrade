@@ -36,6 +36,12 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 
+# Compiled backend TypeScript artifacts (tsx runs source directly; don't commit JS output)
+backend/src/*.js
+backend/src/*.js.map
+backend/src/*.d.ts
+backend/src/*.d.ts.map
+
 # Misc
 .cache/
 coverage/
