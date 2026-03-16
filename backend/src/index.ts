@@ -394,10 +394,11 @@ app.get('/api/metrics', async (c) => {
 });
 
 // ─── Health ────────────────────────────────────────────────────────────────────
+app.get('/', (c) => c.json({ status: 'ok' }));
 app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-const PORT = parseInt(process.env.PORT ?? '3001', 10);
+const port = process.env.PORT || 3001;
 
-serve({ fetch: app.fetch, port: PORT }, (info) => {
-  console.log(`capiTrade backend running on http://localhost:${info.port}`);
+serve({ fetch: app.fetch, port: Number(port) }, (info) => {
+  console.log(`Server running on port ${info.port}`);
 });
