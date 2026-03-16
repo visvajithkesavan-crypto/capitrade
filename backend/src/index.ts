@@ -23,6 +23,7 @@ app.use('*', cors({
     'http://localhost:3001',
     'http://localhost:3002',
     'https://capitrade1-p5oas9yki-visvajith-kesavans-projects.vercel.app',
+    'https://capitrade1-20tzadqki-visvajith-kesavans-projects.vercel.app',
   ],
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
