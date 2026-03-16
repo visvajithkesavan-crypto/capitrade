@@ -395,7 +395,7 @@ app.get('/api/metrics', async (c) => {
 
 // ─── Health ────────────────────────────────────────────────────────────────────
 app.get('/', (c) => c.json({ status: 'ok' }));
-app.get('/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/health', (c) => c.json({ status: 'ok', version: '1.0.1', timestamp: new Date().toISOString() }));
 
 const port = process.env.PORT || 3001;
 
