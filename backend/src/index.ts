@@ -18,13 +18,18 @@ const app = new Hono();
 
 app.use('*', logger());
 app.use('*', cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'https://capitrade1-p5oas9yki-visvajith-kesavans-projects.vercel.app',
-    'https://capitrade1-20tzadqki-visvajith-kesavans-projects.vercel.app',
-  ],
+  origin: (origin) => {
+    if (!origin) return origin;
+    const allowed = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+    ];
+    if (allowed.includes(origin)) return origin;
+    if (origin.includes('visvajith-kesavans-projects.vercel.app')) return origin;
+    if (origin.includes('capitrade') && origin.includes('vercel.app')) return origin;
+    return undefined;
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
   credentials: true,
