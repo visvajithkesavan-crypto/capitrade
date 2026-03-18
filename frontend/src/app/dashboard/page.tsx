@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { createBrowserClient } from "@supabase/ssr"
@@ -21,6 +22,7 @@ import {
   Zap,
   Check,
   LogOut,
+  X,
 } from "lucide-react"
 import {
   AreaChart,
@@ -1656,60 +1658,376 @@ function MarketsView({
   )
 }
 
+// ============================================================================
+// PRE-TRADE DIALOG
+// ============================================================================
+
+function PreTradeDialog({
+  open,
+  onClose,
+  market,
+  position,
+  amount,
+  userId,
+  onConfirm,
+}: {
+  open: boolean
+  onClose: () => void
+  market: string
+  position: "BUY" | "SELL" | "HOLD"
+  amount: string
+  userId: string
+  onConfirm: () => Promise<void>
+}) {
+  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [reasoning, setReasoning] = useState("")
+  const [confidence, setConfidence] = useState<"Low" | "Medium" | "High" | null>(null)
+  const [influence, setInfluence] = useState<string | null>(null)
+  const [botQuestion, setBotQuestion] = useState("")
+  const [followUp, setFollowUp] = useState("")
+  const [botLoading, setBotLoading] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [lockError, setLockError] = useState("")
+
+  useEffect(() => {
+    if (open) {
+      setStep(1)
+      setReasoning("")
+      setConfidence(null)
+      setInfluence(null)
+      setBotQuestion("")
+      setFollowUp("")
+      setLockError("")
+    }
+  }, [open])
+
+  const handleStep2Next = async () => {
+    setBotLoading(true)
+    try {
+      const userMessage = `I want to trade ${market} ${position} with $${amount}. My reasoning: ${reasoning}. Confidence: ${confidence}. Main influence: ${influence}.`
+      const res = await fetch(`${BACKEND_URL}/api/bot/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": userId,
+        },
+        body: JSON.stringify({
+          tradeId: null,
+          phase: "pre_trade",
+          userMessage,
+          messages: [{ role: "user", content: userMessage }],
+        }),
+      })
+      const json = await res.json() as { success: boolean; data?: { reply: string } }
+      setBotQuestion(
+        json.success && json.data?.reply
+          ? json.data.reply
+          : "What specific data or indicators influenced your decision? What risks have you considered?"
+      )
+    } catch {
+      setBotQuestion("What specific data or indicators influenced your decision? What risks have you considered?")
+    } finally {
+      setBotLoading(false)
+      setStep(3)
+    }
+  }
+
+  const handleLockIn = async () => {
+    setConfirming(true)
+    setLockError("")
+    try {
+      await onConfirm()
+      onClose()
+    } catch (err) {
+      setLockError(err instanceof Error ? err.message : "Failed to place trade.")
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  if (!open) return null
+
+  const amountNum = parseFloat(amount) || 0
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative z-10 w-full max-w-lg mx-4 rounded-2xl bg-card border border-border overflow-hidden">
+        {/* Header */}
+        <div className="gradient-border-bottom px-6 py-4 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-foreground">Pre-Trade Analysis</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Step {step} of 3</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="px-6 py-3 border-b border-border">
+          <div className="flex gap-2">
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                  s <= step ? "bg-primary" : "bg-muted"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-6">
+          {/* ── Step 1: Reasoning ── */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted/40 border border-border px-4 py-3">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                  Trade Summary
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-[11px] text-muted-foreground mb-0.5">Market</p>
+                    <p className="font-mono text-sm font-semibold text-foreground">{market}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground mb-0.5">Position</p>
+                    <p
+                      className={`font-mono text-sm font-semibold ${
+                        position === "BUY"
+                          ? "text-primary"
+                          : position === "SELL"
+                          ? "text-destructive"
+                          : "text-warning"
+                      }`}
+                    >
+                      {position}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground mb-0.5">Amount</p>
+                    <p className="font-mono text-sm font-semibold text-foreground">
+                      ${amountNum.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  What made you choose this investment?
+                </label>
+                <textarea
+                  value={reasoning}
+                  onChange={(e) => setReasoning(e.target.value)}
+                  rows={3}
+                  placeholder="Describe your reasoning for this trade..."
+                  className="w-full rounded-lg bg-muted border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none transition-colors"
+                />
+              </div>
+
+              <button
+                onClick={() => setStep(2)}
+                disabled={!reasoning.trim()}
+                className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+
+          {/* ── Step 2: MCQ ── */}
+          {step === 2 && (
+            <div className="space-y-5">
+              <div>
+                <p className="text-sm font-medium text-foreground mb-3">How confident are you?</p>
+                <div className="flex gap-2">
+                  {(["Low", "Medium", "High"] as const).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setConfidence(c)}
+                      className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-all ${
+                        confidence === c
+                          ? c === "High"
+                            ? "bg-primary/20 text-primary border border-primary/50"
+                            : c === "Medium"
+                            ? "bg-warning/20 text-warning border border-warning/50"
+                            : "bg-destructive/20 text-destructive border border-destructive/50"
+                          : "bg-muted border border-border text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-foreground mb-3">
+                  What influenced your decision most?
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {["Research & Data", "Gut Feeling", "News & Social Media", "Just Guessing"].map(
+                    (opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => setInfluence(opt)}
+                        className={`rounded-lg py-2.5 px-3 text-sm font-medium text-left transition-all ${
+                          influence === opt
+                            ? "bg-primary/20 text-primary border border-primary/50"
+                            : "bg-muted border border-border text-muted-foreground hover:bg-muted/80"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setStep(1)}
+                  className="flex-1 rounded-lg bg-muted border border-border text-muted-foreground py-2.5 text-sm font-medium hover:text-foreground transition-colors"
+                >
+                  ← Back
+                </button>
+                <button
+                  onClick={handleStep2Next}
+                  disabled={!confidence || !influence || botLoading}
+                  className="flex-1 rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {botLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="h-3.5 w-3.5 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground animate-spin" />
+                      Thinking…
+                    </span>
+                  ) : (
+                    "Next →"
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: AI Response ── */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <div className="bg-muted rounded-xl rounded-tl-sm border-l-2 border-primary/50 px-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20">
+                    <Bot className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <span className="text-xs font-medium text-primary">AI Advisor</span>
+                </div>
+                <p className="text-sm text-foreground leading-relaxed">{botQuestion}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                  Your response (optional)
+                </label>
+                <textarea
+                  value={followUp}
+                  onChange={(e) => setFollowUp(e.target.value)}
+                  rows={3}
+                  placeholder="Share any additional thoughts..."
+                  className="w-full rounded-lg bg-muted border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none transition-colors"
+                />
+              </div>
+
+              {lockError && (
+                <p className="text-sm text-destructive">{lockError}</p>
+              )}
+
+              <button
+                onClick={handleLockIn}
+                disabled={confirming}
+                className="w-full rounded-lg py-3 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                style={{
+                  background: confirming
+                    ? "var(--muted)"
+                    : "linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)",
+                  color: confirming ? "var(--muted-foreground)" : "#080808",
+                  boxShadow: confirming ? "none" : "0 0 20px rgba(0, 255, 136, 0.25)",
+                }}
+              >
+                {confirming ? (
+                  <>
+                    <span className="h-4 w-4 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+                    Placing Trade…
+                  </>
+                ) : (
+                  "🔒 Lock In Trade"
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function TradesView({
   apiTrades,
   tradesLoading,
   onTradeSuccess,
+  userId,
 }: {
   apiTrades: ApiTrade[]
   tradesLoading: boolean
   onTradeSuccess: () => void
+  userId: string
 }) {
   const [selectedMarket, setSelectedMarket] = useState("Americas")
   const [selectedPosition, setSelectedPosition] = useState<"BUY" | "SELL" | "HOLD">("BUY")
   const [amount, setAmount] = useState("")
   const [waitingPeriod, setWaitingPeriod] = useState<"3" | "7">("3")
-  const [submitting, setSubmitting] = useState(false)
   const [successMsg, setSuccessMsg] = useState("")
   const [errorMsg, setErrorMsg] = useState("")
+  const [dialogOpen, setDialogOpen] = useState(false)
 
-  const handlePlaceTrade = async () => {
+  const submitTrade = async (): Promise<void> => {
+    const res = await fetch(`${BACKEND_URL}/api/trades`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-id": userId,
+      },
+      body: JSON.stringify({
+        market: selectedMarket,
+        amount: parseFloat(amount),
+        position: selectedPosition,
+        waiting_days: parseInt(waitingPeriod),
+      }),
+    })
+    const json = await res.json() as { success: boolean; error?: string }
+    if (!json.success) {
+      throw new Error(json.error ?? "Failed to place trade.")
+    }
+    setSuccessMsg("Trade placed successfully!")
+    setAmount("")
+    onTradeSuccess()
+  }
+
+  const handlePlaceTrade = () => {
     if (!amount || parseFloat(amount) <= 0) {
       setErrorMsg("Please enter a valid amount.")
       return
     }
-    setSubmitting(true)
-    setSuccessMsg("")
     setErrorMsg("")
-    try {
-      const { data: { user } } = await authClient.auth.getUser()
-      const uid = user?.id ?? FALLBACK_USER_ID
-      const res = await fetch(`${BACKEND_URL}/api/trades`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": uid,
-        },
-        body: JSON.stringify({
-          market: selectedMarket,
-          amount: parseFloat(amount),
-          position: selectedPosition,
-          waiting_days: parseInt(waitingPeriod),
-        }),
-      })
-      const json = await res.json() as { success: boolean; error?: string }
-      if (json.success) {
-        setSuccessMsg("Trade placed successfully!")
-        setAmount("")
-        onTradeSuccess()
-      } else {
-        setErrorMsg(json.error ?? "Failed to place trade.")
-      }
-    } catch {
-      setErrorMsg("Could not reach the server.")
-    } finally {
-      setSubmitting(false)
-    }
+    setSuccessMsg("")
+    setDialogOpen(true)
   }
 
   return (
@@ -1811,15 +2129,24 @@ function TradesView({
 
         <button
           onClick={handlePlaceTrade}
-          disabled={submitting}
-          className="mt-4 w-full rounded-lg bg-primary text-primary-foreground py-3 font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="mt-4 w-full rounded-lg bg-primary text-primary-foreground py-3 font-semibold hover:bg-primary/90 transition-colors"
         >
-          {submitting ? "Placing Trade..." : "Place Trade"}
+          Place Trade
         </button>
       </div>
 
       {/* Trade Table with Extended Columns */}
       <TradeTable showExtended apiTrades={apiTrades} loading={tradesLoading} />
+
+      <PreTradeDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        market={selectedMarket}
+        position={selectedPosition}
+        amount={amount}
+        userId={userId}
+        onConfirm={submitTrade}
+      />
     </div>
   )
 }
@@ -2231,6 +2558,7 @@ export default function DashboardPage() {
             apiTrades={apiTrades}
             tradesLoading={tradesLoading}
             onTradeSuccess={() => { fetchTrades(); fetchMetrics() }}
+            userId={userId}
           />
         )
       case "analytics":
