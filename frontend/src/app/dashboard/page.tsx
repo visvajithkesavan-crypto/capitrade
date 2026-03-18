@@ -23,6 +23,7 @@ import {
   Check,
   LogOut,
   X,
+  Lock,
 } from "lucide-react"
 import {
   AreaChart,
@@ -132,6 +133,7 @@ interface ApiTrade {
   entry_price: number
   exit_price: number | null
   status: "active" | "completed"
+  waiting_days?: number
   created_at: string
   bot_decisions: Array<{ position: string; confidence_score: number }>
 }
@@ -975,6 +977,13 @@ function StatusBadge({ status }: { status: "OPEN" | "CLOSED" | "PENDING" }) {
   )
 }
 
+function getDaysInfo(createdAt: string, waitingDays: number) {
+  const msPerDay = 1000 * 60 * 60 * 24
+  const daysElapsed = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / msPerDay))
+  const daysRemaining = Math.max(0, waitingDays - daysElapsed)
+  return { daysElapsed, daysRemaining }
+}
+
 function PnLPill({ pnl }: { pnl: number }) {
   const isPositive = pnl >= 0
 
@@ -999,12 +1008,14 @@ function TradeTable({
   showExtended = false,
   apiTrades,
   loading = false,
+  onComplete,
 }: {
   showExtended?: boolean
   apiTrades?: ApiTrade[]
   loading?: boolean
+  onComplete?: (id: string) => void
 }) {
-  const colCount = showExtended ? 9 : 7
+  const colCount = showExtended ? 11 : 8
 
   return (
     <div className="rounded-xl bg-card border border-border overflow-hidden fade-in">
@@ -1046,6 +1057,11 @@ function TradeTable({
                   Duration
                 </th>
               )}
+              {showExtended && (
+                <th className="px-5 py-3 text-center text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Action
+                </th>
+              )}
               <th className="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Date
               </th>
@@ -1082,6 +1098,9 @@ function TradeTable({
                     : t.position === "SELL"
                     ? "text-destructive"
                     : "text-warning"
+                const daysInfo = t.status === "active" && t.waiting_days
+                  ? getDaysInfo(t.created_at, t.waiting_days)
+                  : null
                 return (
                   <tr
                     key={t.id}
@@ -1137,11 +1156,64 @@ function TradeTable({
                       </td>
                     )}
                     <td className="px-5 py-4 text-center">
-                      <StatusBadge status={status} />
+                      {daysInfo ? (
+                        <div className="flex flex-col items-center gap-1.5">
+                          {daysInfo.daysRemaining <= 0 ? (
+                            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-primary/20 text-primary">
+                              Ready to Complete
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-warning/20 text-warning">
+                              {daysInfo.daysRemaining} {daysInfo.daysRemaining === 1 ? "day" : "days"} left
+                            </span>
+                          )}
+                          <div className="w-24">
+                            <p className="text-[10px] text-muted-foreground mb-0.5 text-center">
+                              Day {Math.min(daysInfo.daysElapsed, t.waiting_days!)} of {t.waiting_days}
+                            </p>
+                            <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{
+                                  width: `${Math.min(100, (daysInfo.daysElapsed / t.waiting_days!) * 100)}%`,
+                                  backgroundColor: daysInfo.daysRemaining <= 0 ? "#00ff88" : "#ffaa00",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <StatusBadge status={status} />
+                      )}
                     </td>
                     {showExtended && (
                       <td className="px-5 py-4 text-right font-mono text-sm tabular-nums text-muted-foreground">
                         —
+                      </td>
+                    )}
+                    {showExtended && (
+                      <td className="px-5 py-4 text-center">
+                        {daysInfo ? (
+                          daysInfo.daysRemaining <= 0 ? (
+                            <button
+                              onClick={() => onComplete?.(t.id)}
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-primary/20 border border-primary/50 text-primary px-3 py-1.5 text-xs font-semibold hover:bg-primary/30 transition-colors"
+                            >
+                              <Check className="h-3 w-3" />
+                              Complete Trade
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="inline-flex items-center gap-1.5 rounded-lg bg-muted border border-border text-muted-foreground px-3 py-1.5 text-xs font-medium cursor-not-allowed opacity-60"
+                            >
+                              <Lock className="h-3 w-3" />
+                              Locked
+                            </button>
+                          )
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
                       </td>
                     )}
                     <td className="px-5 py-4 text-right font-mono text-sm tabular-nums text-muted-foreground">
@@ -2020,6 +2092,18 @@ function TradesView({
     onTradeSuccess()
   }
 
+  const completeTrade = async (tradeId: string): Promise<void> => {
+    const res = await fetch(`${BACKEND_URL}/api/trades/${tradeId}/complete`, {
+      method: "PATCH",
+      headers: { "x-user-id": userId },
+    })
+    const json = await res.json() as { success: boolean; error?: string }
+    if (!json.success) {
+      throw new Error(json.error ?? "Failed to complete trade.")
+    }
+    onTradeSuccess()
+  }
+
   const handlePlaceTrade = () => {
     if (!amount || parseFloat(amount) <= 0) {
       setErrorMsg("Please enter a valid amount.")
@@ -2136,7 +2220,7 @@ function TradesView({
       </div>
 
       {/* Trade Table with Extended Columns */}
-      <TradeTable showExtended apiTrades={apiTrades} loading={tradesLoading} />
+      <TradeTable showExtended apiTrades={apiTrades} loading={tradesLoading} onComplete={completeTrade} />
 
       <PreTradeDialog
         open={dialogOpen}
