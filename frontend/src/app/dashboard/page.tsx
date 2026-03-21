@@ -1090,16 +1090,18 @@ function TradeTable({
                 const pnlPct = t.exit_price
                   ? ((pnl / t.amount) * 100).toFixed(2)
                   : null
+                const isActive = t.status === "active" || t.status === "open"
                 const status: "OPEN" | "CLOSED" =
-                  t.status === "active" ? "OPEN" : "CLOSED"
+                  isActive ? "OPEN" : "CLOSED"
                 const posClass =
                   t.position === "BUY"
                     ? "text-primary"
                     : t.position === "SELL"
                     ? "text-destructive"
                     : "text-warning"
-                const daysInfo = t.status === "active" && t.waiting_days
-                  ? getDaysInfo(t.created_at, t.waiting_days)
+                const effectiveWaitingDays = t.waiting_days ?? 3
+                const daysInfo = isActive
+                  ? getDaysInfo(t.created_at, effectiveWaitingDays)
                   : null
                 return (
                   <tr
@@ -1169,13 +1171,13 @@ function TradeTable({
                           )}
                           <div className="w-24">
                             <p className="text-[10px] text-muted-foreground mb-0.5 text-center">
-                              Day {Math.min(daysInfo.daysElapsed, t.waiting_days!)} of {t.waiting_days}
+                              Day {Math.min(daysInfo.daysElapsed, effectiveWaitingDays)} of {effectiveWaitingDays}
                             </p>
                             <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
                               <div
                                 className="h-full rounded-full transition-all duration-500"
                                 style={{
-                                  width: `${Math.min(100, (daysInfo.daysElapsed / t.waiting_days!) * 100)}%`,
+                                  width: `${Math.min(100, (daysInfo.daysElapsed / effectiveWaitingDays) * 100)}%`,
                                   backgroundColor: daysInfo.daysRemaining <= 0 ? "#00ff88" : "#ffaa00",
                                 }}
                               />
