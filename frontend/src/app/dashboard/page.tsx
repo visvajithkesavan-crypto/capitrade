@@ -37,6 +37,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
+import PostTradeReflectionDialog, { type ReflectionTrade } from "@/components/PostTradeReflectionDialog"
 
 // ============================================================================
 // TYPES
@@ -2070,6 +2071,10 @@ function TradesView({
   const [successMsg, setSuccessMsg] = useState("")
   const [errorMsg, setErrorMsg] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [reflectionOpen, setReflectionOpen] = useState(false)
+  const [reflectionTrade, setReflectionTrade] = useState<ReflectionTrade | null>(null)
+  const [reflectionPnl, setReflectionPnl] = useState(0)
+  const [reflectionExitPrice, setReflectionExitPrice] = useState(0)
 
   const submitTrade = async (): Promise<void> => {
     const res = await fetch(`${BACKEND_URL}/api/trades`, {
@@ -2099,10 +2104,19 @@ function TradesView({
       method: "PATCH",
       headers: { "x-user-id": userId },
     })
-    const json = await res.json() as { success: boolean; error?: string }
+    const json = await res.json() as {
+      success: boolean
+      error?: string
+      data?: { trade: ApiTrade; pnl: number; exitPrice: number }
+    }
     if (!json.success) {
       throw new Error(json.error ?? "Failed to complete trade.")
     }
+    const originalTrade = apiTrades.find((t) => t.id === tradeId) ?? null
+    setReflectionTrade(originalTrade)
+    setReflectionPnl(json.data?.pnl ?? 0)
+    setReflectionExitPrice(json.data?.exitPrice ?? 0)
+    setReflectionOpen(true)
     onTradeSuccess()
   }
 
@@ -2232,6 +2246,14 @@ function TradesView({
         amount={amount}
         userId={userId}
         onConfirm={submitTrade}
+      />
+      <PostTradeReflectionDialog
+        open={reflectionOpen}
+        onClose={() => setReflectionOpen(false)}
+        trade={reflectionTrade}
+        pnl={reflectionPnl}
+        exitPrice={reflectionExitPrice}
+        userId={userId}
       />
     </div>
   )
