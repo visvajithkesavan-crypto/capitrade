@@ -202,6 +202,18 @@ app.patch('/api/trades/:id/complete', async (c) => {
   const { data: trade } = await supabase.from('trades').select('*').eq('id', tradeId).eq('user_id', userId).single();
   if (!trade) return c.json({ success: false, error: 'Trade not found' }, 404);
 
+  const tradeDate = new Date(trade.created_at)
+  const now = new Date()
+  const daysPassed = (now.getTime() - tradeDate.getTime()) / (1000 * 60 * 60 * 24)
+
+  if (daysPassed < trade.waiting_days) {
+    const daysRemaining = Math.ceil(trade.waiting_days - daysPassed)
+    return c.json({ 
+      success: false, 
+      error: `Trade is locked for ${daysRemaining} more day${daysRemaining === 1 ? '' : 's'}. Come back when the waiting period ends.`
+    }, 400)
+  }
+
   const meta      = MARKET_SYMBOLS[trade.market];
   const exitPrice = meta ? await fetchFinnhubQuote(meta.finnhub) : trade.entry_price;
   const pnl =
