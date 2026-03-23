@@ -285,8 +285,8 @@ app.post('/api/bot/chat', async (c) => {
 
     let tradingHistoryContext = '';
     if (allTrades && allTrades.length > 0) {
-      const activeTrades = allTrades.filter(t => t.status === 'active');
-      const completedTrades = allTrades.filter(t => t.status === 'completed');
+      const activeTrades = allTrades.filter(t => t.status === 'active' || t.status === 'open');
+      const completedTrades = allTrades.filter(t => t.status === 'completed' || t.status === 'closed');
 
       const activeLines = activeTrades.map(t => {
         const daysElapsed = Math.floor((Date.now() - new Date(t.created_at).getTime()) / (1000 * 60 * 60 * 24));
@@ -320,7 +320,7 @@ app.post('/api/bot/chat', async (c) => {
       ].join('\n');
     }
 
-    const systemPrompt = [
+    let systemPrompt = [
       `You are a financial learning COACH for capiTrade. Your purpose is to help users improve their investment thinking through the Socratic method.`,
       ``,
       `RULES:`,
@@ -341,6 +341,26 @@ app.post('/api/bot/chat', async (c) => {
       ragContext ? `\nRAG CONTEXT:\n${ragContext}` : '',
       tradingHistoryContext || '',
     ].filter(Boolean).join('\n');
+
+    if (allTrades && allTrades.length > 0) {
+      const activeTrades = allTrades.filter((t: { status: string }) =>
+        t.status === 'active' || t.status === 'open'
+      );
+      const completedTrades = allTrades.filter((t: { status: string }) =>
+        t.status === 'completed' || t.status === 'closed'
+      );
+
+      const tradeContext = [
+        activeTrades.length > 0 ? `ACTIVE TRADES:\n${activeTrades.map((t: { market: string; position: string; entry_price: number; created_at: string }) =>
+          `- ${t.market} ${t.position} at entry ${t.entry_price}, placed ${t.created_at?.split('T')[0]}`
+        ).join('\n')}` : '',
+        completedTrades.length > 0 ? `COMPLETED TRADES:\n${completedTrades.map((t: { market: string; position: string; entry_price: number; exit_price: number | null }) =>
+          `- ${t.market} ${t.position} entry ${t.entry_price} → exit ${t.exit_price || 'open'}, result: ${t.exit_price ? (t.position === 'BUY' ? (t.exit_price > t.entry_price ? 'PROFIT' : 'LOSS') : (t.exit_price < t.entry_price ? 'PROFIT' : 'LOSS')) : 'pending'}`
+        ).join('\n')}` : '',
+      ].filter(Boolean).join('\n\n');
+
+      systemPrompt = systemPrompt + '\n\nUSER TRADE DATA:\n' + tradeContext;
+    }
 
     const chatHistory = [...history, { role: 'user' as const, content: userMessage }];
     let botReply = '';
