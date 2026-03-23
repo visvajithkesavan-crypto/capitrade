@@ -251,14 +251,25 @@ app.post('/api/bot/chat', async (c) => {
   try {
     const body = await c.req.json<{
       tradeId: string;
-      phase: 'pre_trade' | 'post_trade';
+      phase: 'pre_trade' | 'post_trade' | 'coaching';
       userMessage: string;
       confidenceLevel?: string;
       analysisType?: string;
       messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+      allTrades?: Array<{
+        id: string;
+        market: string;
+        position: string;
+        amount: number;
+        entry_price: number;
+        exit_price: number | null;
+        status: string;
+        waiting_days?: number;
+        created_at: string;
+      }>;
     }>();
 
-    const { tradeId, phase, userMessage, confidenceLevel, analysisType } = body;
+    const { tradeId, phase, userMessage, confidenceLevel, analysisType, allTrades } = body;
     const history = body.messages ?? [];
 
     const { data: trade } = await supabase.from('trades').select('*, bot_decisions(*)').eq('id', tradeId).single();
@@ -271,6 +282,43 @@ app.post('/api/bot/chat', async (c) => {
       similarTrades?.length ? `Past similar trades:\n${similarTrades.map((t: { content: string }) => `- ${t.content}`).join('\n')}` : '',
       coachingPrompts?.length ? `Coaching prompts:\n${coachingPrompts.map((p: { content: string }) => `- ${p.content}`).join('\n')}` : '',
     ].filter(Boolean).join('\n\n');
+
+    let tradingHistoryContext = '';
+    if (allTrades && allTrades.length > 0) {
+      const activeTrades = allTrades.filter(t => t.status === 'active');
+      const completedTrades = allTrades.filter(t => t.status === 'completed');
+
+      const activeLines = activeTrades.map(t => {
+        const daysElapsed = Math.floor((Date.now() - new Date(t.created_at).getTime()) / (1000 * 60 * 60 * 24));
+        const daysRemaining = Math.max(0, (t.waiting_days ?? 3) - daysElapsed);
+        return `  - ${t.market} ${t.position} @ entry ${t.entry_price} ($${t.amount}), ${daysRemaining} day(s) remaining`;
+      });
+
+      const completedLines = completedTrades.map(t => {
+        let pnl = 0;
+        if (t.exit_price) {
+          if (t.position === 'BUY') pnl = ((t.exit_price - t.entry_price) / t.entry_price) * t.amount;
+          else if (t.position === 'SELL') pnl = ((t.entry_price - t.exit_price) / t.entry_price) * t.amount;
+        }
+        const result = pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
+        return `  - ${t.market} ${t.position} @ ${t.entry_price} → ${t.exit_price ?? 'N/A'} (${result})`;
+      });
+
+      tradingHistoryContext = [
+        '\nTRADING HISTORY CONTEXT:',
+        activeTrades.length > 0 ? `Active trades:\n${activeLines.join('\n')}` : 'Active trades: none',
+        completedTrades.length > 0 ? `Completed trades:\n${completedLines.join('\n')}` : 'Completed trades: none',
+        '',
+        'Use this context to:',
+        '- Reference specific trades the user has made',
+        '- Identify patterns in their trading behaviour',
+        '- Point out what they might be missing in their analysis',
+        '- Compare their current reasoning to past decisions',
+        '',
+        'CRITICAL: Stay fully Socratic. Never tell the user what to do.',
+        'Never give buy/sell advice. Only ask questions that help them think deeper. Reference their actual trade data when relevant.',
+      ].join('\n');
+    }
 
     const systemPrompt = [
       `You are a financial learning COACH for capiTrade. Your purpose is to help users improve their investment thinking through the Socratic method.`,
@@ -291,6 +339,7 @@ app.post('/api/bot/chat', async (c) => {
       `- Analysis type: ${analysisType ?? 'not stated'}`,
       trade?.bot_decisions?.[0] ? `- Bot's independent decision: ${trade.bot_decisions[0].position} (confidence: ${trade.bot_decisions[0].confidence_score})` : '',
       ragContext ? `\nRAG CONTEXT:\n${ragContext}` : '',
+      tradingHistoryContext || '',
     ].filter(Boolean).join('\n');
 
     const chatHistory = [...history, { role: 'user' as const, content: userMessage }];
@@ -322,16 +371,18 @@ app.post('/api/bot/chat', async (c) => {
     }
 
     const updatedMessages = [...chatHistory, { role: 'assistant', content: botReply, timestamp: new Date().toISOString() }];
-    await supabase.from('conversations').upsert(
-      { trade_id: tradeId, phase, messages: updatedMessages, updated_at: new Date().toISOString() },
-      { onConflict: 'trade_id,phase' }
-    );
+    if (tradeId !== 'general') {
+      await supabase.from('conversations').upsert(
+        { trade_id: tradeId, phase, messages: updatedMessages, updated_at: new Date().toISOString() },
+        { onConflict: 'trade_id,phase' }
+      );
+    }
 
     try {
       const embedding = await generateEmbedding(userMessage);
       await supabase.from('knowledge_base').insert({
         content: userMessage, embedding,
-        metadata: { type: 'user_reasoning', user_id: userId, trade_id: tradeId, phase },
+        metadata: { type: 'user_reasoning', user_id: userId, trade_id: tradeId === 'general' ? null : tradeId, phase },
       });
     } catch { /* non-critical */ }
 
