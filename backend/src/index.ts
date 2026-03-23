@@ -271,6 +271,8 @@ app.post('/api/bot/chat', async (c) => {
 
     const { tradeId, phase, userMessage, confidenceLevel, analysisType, allTrades } = body;
     const history = body.messages ?? [];
+    console.log('[Bot Chat] allTrades received:', allTrades?.length, 'trades');
+    console.log('[Bot Chat] Sample trade:', JSON.stringify(allTrades?.[0]));
 
     const { data: trade } = await supabase.from('trades').select('*, bot_decisions(*)').eq('id', tradeId).single();
     const [similarTrades, coachingPrompts] = await Promise.all([
@@ -359,6 +361,7 @@ app.post('/api/bot/chat', async (c) => {
         ).join('\n')}` : '',
       ].filter(Boolean).join('\n\n');
 
+      console.log('[Bot Chat] Trade context built:', tradeContext?.substring(0, 200));
       systemPrompt = systemPrompt + '\n\nUSER TRADE DATA:\n' + tradeContext;
     }
 
