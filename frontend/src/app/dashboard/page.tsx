@@ -1341,10 +1341,26 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const [localTrades, setLocalTrades] = useState<ApiTrade[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  useEffect(() => {
+    const fetchLocalTrades = async () => {
+      if (!userId) return
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/trades`, {
+          headers: { "x-user-id": userId },
+        })
+        const json = await res.json() as { success: boolean; data?: ApiTrade[] }
+        if (json.success && json.data) setLocalTrades(json.data)
+      } catch { /* keep empty on error */ }
+    }
+    fetchLocalTrades()
+  }, [userId])
+
+  const trades = localTrades.length > 0 ? localTrades : apiTrades
   const activeTradeId =
-    apiTrades.find((t) => t.status === "active")?.id ?? apiTrades[0]?.id ?? null
+    trades.find((t) => t.status === "active")?.id ?? trades[0]?.id ?? null
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -1384,7 +1400,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
           phase: "coaching",
           userMessage: input,
           messages: history,
-          allTrades: apiTrades,
+          allTrades: trades,
         }),
       })
 
