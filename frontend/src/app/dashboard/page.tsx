@@ -1390,7 +1390,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
   }, [messages, isTyping])
 
   const handleSend = async () => {
-    if (!input.trim() || isTyping || !activeTradeId) return
+    if (!input.trim() || isTyping) return
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -1413,7 +1413,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
           "x-user-id": userId,
         },
         body: JSON.stringify({
-          tradeId: activeTradeId,
+          tradeId: activeTradeId ?? "general",
           phase: "coaching",
           userMessage: input,
           messages: [],
