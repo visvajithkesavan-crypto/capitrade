@@ -336,7 +336,18 @@ const initialMessages: ChatMessage[] = [
     id: "1",
     role: "bot",
     content:
-      "I know about all your trades. Ask me anything about your positions, your patterns, or what you might be missing.",
+      "Good morning. Markets are showing mixed signals today. S&P 500 momentum is strong with institutional buying detected.",
+  },
+  {
+    id: "2",
+    role: "user",
+    content: "What's your take on Euro Stoxx?",
+  },
+  {
+    id: "3",
+    role: "bot",
+    content:
+      "SX5E is facing headwinds from ECB policy uncertainty. I recommend reducing exposure. The technical setup suggests a potential retest of 4850 support.",
   },
 ]
 
@@ -1341,26 +1352,27 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
-  const [localTrades, setLocalTrades] = useState<ApiTrade[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [localTrades, setLocalTrades] = useState<any[]>([])
 
   useEffect(() => {
+    if (!userId) return
     const fetchLocalTrades = async () => {
-      if (!userId) return
       try {
         const res = await fetch(`${BACKEND_URL}/api/trades`, {
-          headers: { "x-user-id": userId },
+          headers: { 'x-user-id': userId }
         })
-        const json = await res.json() as { success: boolean; data?: ApiTrade[] }
+        const json = await res.json()
         if (json.success && json.data) setLocalTrades(json.data)
-      } catch { /* keep empty on error */ }
+      } catch (e) {
+        console.error('Failed to fetch trades for AI advisor:', e)
+      }
     }
     fetchLocalTrades()
   }, [userId])
 
-  const trades = localTrades.length > 0 ? localTrades : apiTrades
   const activeTradeId =
-    trades.find((t) => t.status === "active")?.id ?? trades[0]?.id ?? null
+    apiTrades.find((t) => t.status === "active")?.id ?? apiTrades[0]?.id ?? null
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -1371,7 +1383,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
   }, [messages, isTyping])
 
   const handleSend = async () => {
-    if (!input.trim() || isTyping) return
+    if (!input.trim() || isTyping || !activeTradeId) return
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -1396,11 +1408,11 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
           "x-user-id": userId,
         },
         body: JSON.stringify({
-          tradeId: activeTradeId ?? "general",
-          phase: "coaching",
+          tradeId: activeTradeId,
+          phase: "pre_trade",
           userMessage: input,
           messages: history,
-          allTrades: trades,
+          allTrades: localTrades,
         }),
       })
 
@@ -1447,13 +1459,21 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        <>
+        {activeTradeId === null ? (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-muted-foreground text-center px-4">
+              Place a trade first to start a conversation with your AI Advisor
+            </p>
+          </div>
+        ) : (
+          <>
             {messages.map((message) => (
               <ChatBubble key={message.id} message={message} />
             ))}
             {isTyping && <TypingIndicator />}
             <div ref={messagesEndRef} />
           </>
+        )}
       </div>
 
       {/* Input */}
@@ -1464,12 +1484,14 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Ask your AI advisor..."
+            placeholder={activeTradeId ? "Ask your AI advisor..." : "Place a trade to enable chat"}
+            disabled={!activeTradeId}
             className="flex-1 rounded-lg bg-muted border border-border px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
           />
           <button
             onClick={handleSend}
-            className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            disabled={!activeTradeId}
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="h-4 w-4" />
           </button>
