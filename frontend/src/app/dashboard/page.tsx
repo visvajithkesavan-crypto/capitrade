@@ -1354,7 +1354,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [localTrades, setLocalTrades] = useState<any[]>([])
+  const localTradesRef = useRef<any[]>([])
 
   console.log('[AIAdvisor] userId on mount:', userId)
 
@@ -1368,8 +1368,8 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
         })
         const json = await res.json()
         if (json.success && json.data) {
-          setLocalTrades(json.data)
-          console.log('[AIAdvisor] Loaded trades:', json.data?.length, json.data?.[0])
+          localTradesRef.current = json.data
+          console.log('[AIAdvisor] Trades loaded into ref:', json.data.length)
         }
       } catch (e) {
         console.error('Failed to fetch trades for AI advisor:', e)
@@ -1404,6 +1404,8 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
     setIsTyping(true)
 
     try {
+      console.log('[AIAdvisor] Sending allTrades count:', localTradesRef.current.length)
+      console.log('[AIAdvisor] First trade:', JSON.stringify(localTradesRef.current[0]))
       const res = await fetch(`${BACKEND_URL}/api/bot/chat`, {
         method: "POST",
         headers: {
@@ -1415,7 +1417,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
           phase: "coaching",
           userMessage: input,
           messages: [],
-          allTrades: localTrades,
+          allTrades: localTradesRef.current,
         }),
       })
 
