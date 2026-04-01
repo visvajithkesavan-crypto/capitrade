@@ -24,6 +24,7 @@ import {
   LogOut,
   X,
   Lock,
+  RotateCcw,
 } from "lucide-react"
 import {
   AreaChart,
@@ -1403,10 +1404,6 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
     setIsTyping(true)
 
     try {
-      const history = updatedMessages
-        .slice(-10)
-        .map((m) => ({ role: m.role === "bot" ? "assistant" : "user", content: m.content }))
-
       const res = await fetch(`${BACKEND_URL}/api/bot/chat`, {
         method: "POST",
         headers: {
@@ -1415,9 +1412,9 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
         },
         body: JSON.stringify({
           tradeId: activeTradeId,
-          phase: "pre_trade",
+          phase: "coaching",
           userMessage: input,
-          messages: history,
+          messages: [],
           allTrades: localTrades,
         }),
       })
@@ -1449,17 +1446,27 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
     <div className="flex h-full flex-col rounded-xl bg-card border border-border overflow-hidden fade-in">
       {/* Header with gradient border */}
       <div className="gradient-border-bottom px-4 py-4">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
-              <Bot className="h-5 w-5 text-primary" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20">
+                <Bot className="h-5 w-5 text-primary" />
+              </div>
+              <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-primary border-2 border-card pulse-dot" />
             </div>
-            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-primary border-2 border-card pulse-dot" />
+            <div>
+              <h3 className="font-semibold text-foreground">AI Advisor</h3>
+              <span className="text-xs text-primary">Online</span>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-foreground">AI Advisor</h3>
-            <span className="text-xs text-primary">Online</span>
-          </div>
+          <button
+            onClick={() => setMessages(initialMessages)}
+            title="Clear chat"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Clear
+          </button>
         </div>
       </div>
 
