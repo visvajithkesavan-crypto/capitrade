@@ -1350,7 +1350,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 }
 
 function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: string }) {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -1462,7 +1462,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
             </div>
           </div>
           <button
-            onClick={() => setMessages(initialMessages)}
+            onClick={() => setMessages([])}
             title="Clear chat"
             className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
@@ -1474,10 +1474,10 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {activeTradeId === null ? (
+        {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-muted-foreground text-center px-4">
-              Place a trade first to start a conversation with your AI Advisor
+              I can see your trades. Ask me anything about your positions or trading patterns.
             </p>
           </div>
         ) : (
@@ -1499,14 +1499,12 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder={activeTradeId ? "Ask your AI advisor..." : "Place a trade to enable chat"}
-            disabled={!activeTradeId}
-            className="flex-1 rounded-lg bg-muted border border-border px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder="Ask your AI advisor..."
+            className="flex-1 rounded-lg bg-muted border border-border px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
           />
           <button
             onClick={handleSend}
-            disabled={!activeTradeId}
-            className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
             <Send className="h-4 w-4" />
           </button>
