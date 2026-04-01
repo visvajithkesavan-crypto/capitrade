@@ -1355,7 +1355,10 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [localTrades, setLocalTrades] = useState<any[]>([])
 
+  console.log('[AIAdvisor] userId on mount:', userId)
+
   useEffect(() => {
+    console.log('[AIAdvisor] useEffect triggered, userId:', userId)
     if (!userId) return
     const fetchLocalTrades = async () => {
       try {
@@ -1363,7 +1366,10 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
           headers: { 'x-user-id': userId }
         })
         const json = await res.json()
-        if (json.success && json.data) setLocalTrades(json.data)
+        if (json.success && json.data) {
+          setLocalTrades(json.data)
+          console.log('[AIAdvisor] Loaded trades:', json.data?.length, json.data?.[0])
+        }
       } catch (e) {
         console.error('Failed to fetch trades for AI advisor:', e)
       }
