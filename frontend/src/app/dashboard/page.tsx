@@ -25,6 +25,8 @@ import {
   X,
   Lock,
   RotateCcw,
+  Maximize2,
+  Minimize2,
 } from "lucide-react"
 import {
   AreaChart,
@@ -1329,17 +1331,18 @@ function TypingIndicator() {
   )
 }
 
-function ChatBubble({ message }: { message: ChatMessage }) {
+function ChatBubble({ message, fontSize }: { message: ChatMessage; fontSize: number }) {
   const isBot = message.role === "bot"
 
   return (
     <div className={`flex ${isBot ? "justify-start" : "justify-end"}`}>
       <div
-        className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+        className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
           isBot
             ? "bg-muted text-foreground rounded-bl-sm border-l-2 border-primary/50 animate-in fade-in slide-in-from-bottom-2 duration-300"
             : "bg-secondary text-secondary-foreground rounded-br-sm"
         }`}
+        style={{ fontSize: `${fontSize}px` }}
       >
         {message.content}
       </div>
@@ -1351,8 +1354,13 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [fontSize, setFontSize] = useState(16)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const localTradesRef = useRef<any[]>([])
+
+  const increaseFontSize = () => setFontSize(f => Math.min(f + 2, 20))
+  const decreaseFontSize = () => setFontSize(f => Math.max(f - 2, 12))
 
   console.log('[AIAdvisor] userId on mount:', userId)
 
@@ -1442,7 +1450,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
     }
   }
 
-  return (
+  const chatPanel = (
     <div className="flex h-full flex-col rounded-xl bg-card border border-border overflow-hidden fade-in">
       {/* Header with gradient border */}
       <div className="gradient-border-bottom px-4 py-4">
@@ -1459,14 +1467,37 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
               <span className="text-xs text-primary">Online</span>
             </div>
           </div>
-          <button
-            onClick={() => setMessages([])}
-            title="Clear chat"
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Clear
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={decreaseFontSize}
+              title="Decrease font size"
+              className="rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              A-
+            </button>
+            <button
+              onClick={increaseFontSize}
+              title="Increase font size"
+              className="rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              A+
+            </button>
+            <button
+              onClick={() => setMessages([])}
+              title="Clear chat"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Clear
+            </button>
+            <button
+              onClick={() => setIsExpanded(e => !e)}
+              title={isExpanded ? "Collapse" : "Expand"}
+              className="flex items-center justify-center rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1481,7 +1512,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
         ) : (
           <>
             {messages.map((message) => (
-              <ChatBubble key={message.id} message={message} />
+              <ChatBubble key={message.id} message={message} fontSize={fontSize} />
             ))}
             {isTyping && <TypingIndicator />}
             <div ref={messagesEndRef} />
@@ -1510,6 +1541,24 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
       </div>
     </div>
   )
+
+  if (isExpanded) {
+    return (
+      <>
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          onClick={() => setIsExpanded(false)}
+        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="pointer-events-auto w-[700px] h-[80vh] shadow-2xl rounded-xl overflow-hidden">
+            {chatPanel}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  return chatPanel
 }
 
 function Navbar({
