@@ -41,6 +41,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import PostTradeReflectionDialog, { type ReflectionTrade } from "@/components/PostTradeReflectionDialog"
+import ReactMarkdown from "react-markdown"
 
 // ============================================================================
 // TYPES
@@ -1344,7 +1345,13 @@ function ChatBubble({ message, fontSize }: { message: ChatMessage; fontSize: num
         }`}
         style={{ fontSize: `${fontSize}px` }}
       >
-        {message.content}
+        {isBot ? (
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
+        ) : (
+          message.content
+        )}
       </div>
     </div>
   )
