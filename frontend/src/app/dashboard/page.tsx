@@ -1092,7 +1092,7 @@ function TradeTable({
                 const pnlPct = t.exit_price
                   ? ((pnl / t.amount) * 100).toFixed(2)
                   : null
-                const isActive = t.status === "active" || t.status === "open"
+                const isActive = t.status === "active" || t.status === "pending"
                 const status: "OPEN" | "CLOSED" =
                   isActive ? "OPEN" : "CLOSED"
                 const posClass =
