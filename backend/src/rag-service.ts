@@ -43,7 +43,9 @@ export async function generateEmbedding(text: string): Promise<number[]> {
       input: [text],
       model: 'voyage-3-lite',
     });
-    return response.embeddings![0];
+    const embedding = response.data?.[0]?.embedding;
+    if (!embedding) throw new Error('No embedding returned from Voyage AI');
+    return embedding;
   } catch (err) {
     console.error('[rag-service] generateEmbedding failed, using zero-vector fallback:', err);
     return EMBEDDING_ZERO_VECTOR;
