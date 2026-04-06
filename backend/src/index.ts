@@ -249,14 +249,18 @@ app.post('/api/bot/chat', async (c) => {
   if (!userId) return c.json({ success: false, error: 'Missing x-user-id header' }, 401);
 
   try {
-    const body = await c.req.json<{
+    const rawText = await c.req.text();
+    console.log('=== RAW BODY ===', rawText);
+    const body = JSON.parse(rawText) as {
       tradeId: string;
       phase: 'pre_trade' | 'post_trade';
       userMessage: string;
       confidenceLevel?: string;
       analysisType?: string;
       messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
-    }>();
+      allTrades?: unknown;
+    };
+    console.log('=== PARSED allTrades ===', JSON.stringify(body.allTrades));
 
     const { tradeId, phase, userMessage, confidenceLevel, analysisType } = body;
     const history = body.messages ?? [];
