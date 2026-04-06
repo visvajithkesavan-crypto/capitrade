@@ -258,11 +258,17 @@ app.post('/api/bot/chat', async (c) => {
       confidenceLevel?: string;
       analysisType?: string;
       messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
-      allTrades?: unknown;
+      allTrades?: Array<{ market: string; position: string; amount: number | string; status: string }>;
     };
     console.log('=== PARSED allTrades ===', JSON.stringify(body.allTrades));
 
     const { tradeId, phase, userMessage, confidenceLevel, analysisType } = body;
+    const allTrades = body.allTrades;
+    const tradeContext = Array.isArray(allTrades) && allTrades.length > 0
+      ? allTrades.map((t: any) =>
+          `- ${t.market} | ${t.position} | $${t.amount} | Status: ${t.status}`
+        ).join('\n')
+      : 'No active trades.';
     const history = body.messages ?? [];
 
     const { data: trade } = await supabase.from('trades').select('*, bot_decisions(*)').eq('id', tradeId).single();
@@ -294,6 +300,7 @@ app.post('/api/bot/chat', async (c) => {
       `- Confidence level: ${confidenceLevel ?? 'not stated'}`,
       `- Analysis type: ${analysisType ?? 'not stated'}`,
       trade?.bot_decisions?.[0] ? `- Bot's independent decision: ${trade.bot_decisions[0].position} (confidence: ${trade.bot_decisions[0].confidence_score})` : '',
+      `\nCURRENT USER TRADES:\n${tradeContext}`,
       ragContext ? `\nRAG CONTEXT:\n${ragContext}` : '',
     ].filter(Boolean).join('\n');
 

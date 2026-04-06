@@ -1404,8 +1404,8 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
     setIsTyping(true)
 
     try {
-      console.log('[AIAdvisor] Sending allTrades count:', localTradesRef.current.length)
-      console.log('[AIAdvisor] First trade:', JSON.stringify(localTradesRef.current[0]))
+      console.log('[AIAdvisor] Sending allTrades count:', apiTrades.length)
+      console.log('[AIAdvisor] First trade:', JSON.stringify(apiTrades[0]))
       const res = await fetch(`${BACKEND_URL}/api/bot/chat`, {
         method: "POST",
         headers: {
@@ -1417,7 +1417,7 @@ function AIAdvisor({ apiTrades, userId }: { apiTrades: ApiTrade[]; userId: strin
           phase: "coaching",
           userMessage: input,
           messages: [],
-          allTrades: localTradesRef.current,
+          allTrades: apiTrades,
         }),
       })
 
