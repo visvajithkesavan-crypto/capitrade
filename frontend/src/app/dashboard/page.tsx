@@ -1320,12 +1320,10 @@ function TradeTable({
 function TypingIndicator() {
   return (
     <div className="flex justify-start">
-      <div className="bg-muted rounded-2xl rounded-bl-sm px-4 py-3">
-        <div className="flex items-center gap-1">
-          <span className="typing-dot h-2 w-2 rounded-full bg-muted-foreground" />
-          <span className="typing-dot h-2 w-2 rounded-full bg-muted-foreground" />
-          <span className="typing-dot h-2 w-2 rounded-full bg-muted-foreground" />
-        </div>
+      <div className="flex gap-1 items-center p-3 bg-muted rounded-lg w-fit">
+        <span className="w-2 h-2 bg-foreground/40 rounded-full animate-bounce [animation-delay:0ms]" />
+        <span className="w-2 h-2 bg-foreground/40 rounded-full animate-bounce [animation-delay:150ms]" />
+        <span className="w-2 h-2 bg-foreground/40 rounded-full animate-bounce [animation-delay:300ms]" />
       </div>
     </div>
   )
@@ -1339,7 +1337,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
           isBot
-            ? "bg-muted text-foreground rounded-bl-sm border-l-2 border-primary/50"
+            ? "bg-muted text-foreground rounded-bl-sm border-l-2 border-primary/50 animate-in fade-in slide-in-from-bottom-2 duration-300"
             : "bg-secondary text-secondary-foreground rounded-br-sm"
         }`}
       >
