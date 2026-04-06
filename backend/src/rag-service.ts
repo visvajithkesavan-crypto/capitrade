@@ -3,14 +3,15 @@
  *
  * Retrieval-Augmented Generation helpers.
  *
- * generateEmbedding()      — converts text → vector using HuggingFace MiniLM
+ * generateEmbedding()      — converts text → vector using Voyage AI voyage-3-lite
  * searchSimilarTrades()    — finds past user trades most semantically similar to new reasoning
  * searchCoachingPrompts()  — retrieves relevant Socratic coaching prompts from the knowledge base
  *
- * Embedding model:  sentence-transformers/all-MiniLM-L6-v2 → 384 dimensions
+ * Embedding model:  voyage-3-lite → 512 dimensions
  * Vector storage:   Supabase pgvector via the `match_documents` RPC function
  */
 
+import { VoyageAIClient } from 'voyageai';
 import { supabase } from './supabase-client';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -24,41 +25,25 @@ export interface KnowledgeBaseRow {
 
 // ─── Embedding generation ──────────────────────────────────────────────────────
 
-const HF_API_URL =
-  'https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2';
+const voyage = new VoyageAIClient({
+  apiKey: process.env.VOYAGE_API_KEY,
+});
 
-const EMBEDDING_ZERO_VECTOR: number[] = new Array(384).fill(0);
+const EMBEDDING_ZERO_VECTOR: number[] = new Array(512).fill(0);
 
 /**
- * Converts a text string into a 384-dimensional embedding vector using the
- * HuggingFace Inference API (free tier).
+ * Converts a text string into a 512-dimensional embedding vector using
+ * Voyage AI voyage-3-lite.
  *
- * Returns a zero vector of length 384 on any failure so callers keep working.
+ * Returns a zero vector of length 512 on any failure so callers keep working.
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   try {
-    const apiKey = process.env.HUGGINGFACE_API_KEY;
-    if (!apiKey) throw new Error('HUGGINGFACE_API_KEY is not configured.');
-
-    const response = await fetch(HF_API_URL, {
-      method:  'POST',
-      headers: {
-        Authorization:  `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ inputs: text.trim(), options: { wait_for_model: true } }),
+    const response = await voyage.embed({
+      input: [text],
+      model: 'voyage-3-lite',
     });
-
-    if (!response.ok) {
-      const msg = await response.text();
-      throw new Error(`HuggingFace embedding error ${response.status}: ${msg}`);
-    }
-
-    const json = await response.json() as number[] | number[][];
-
-    // MiniLM returns a 2-D array [[...]] when a single string is passed; flatten.
-    if (Array.isArray(json[0])) return json[0] as number[];
-    return json as number[];
+    return response.embeddings![0];
   } catch (err) {
     console.error('[rag-service] generateEmbedding failed, using zero-vector fallback:', err);
     return EMBEDDING_ZERO_VECTOR;

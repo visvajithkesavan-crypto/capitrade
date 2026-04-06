@@ -74,6 +74,7 @@ npm run dev
 **Required backend env vars:**
 ```
 ANTHROPIC_API_KEY=
+VOYAGE_API_KEY=
 FINNHUB_API_KEY=
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=

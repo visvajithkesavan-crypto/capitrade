@@ -20,7 +20,8 @@
     "@huggingface/inference": "^4.13.15",
     "@supabase/supabase-js": "^2.99.0",
     "dotenv": "^17.3.1",
-    "hono": "^4.12.7"
+    "hono": "^4.12.7",
+    "voyageai": "^0.2.1"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
@@ -30,4 +31,3 @@
     "typescript": "^5.9.3"
   }
 }
-
