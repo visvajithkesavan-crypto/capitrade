@@ -277,6 +277,22 @@ app.post('/api/bot/chat', async (c) => {
       searchCoachingPrompts(userMessage, 2),
     ]);
 
+    let preTradeContext = '';
+    if (phase === 'post_trade' && tradeId) {
+      const { data: preTrade } = await supabase
+        .from('conversations')
+        .select('messages')
+        .eq('trade_id', tradeId)
+        .eq('phase', 'pre_trade')
+        .single();
+      if (preTrade?.messages && Array.isArray(preTrade.messages)) {
+        const formatted = preTrade.messages
+          .map((m: any) => `${m.role === 'user' ? 'User' : 'Bot'}: ${m.content}`)
+          .join('\n');
+        preTradeContext = `\nPRE-TRADE CONVERSATION FOR THIS TRADE:\n${formatted}`;
+      }
+    }
+
     const ragContext = [
       similarTrades?.length ? `Past similar trades:\n${similarTrades.map((t: { content: string }) => `- ${t.content}`).join('\n')}` : '',
       coachingPrompts?.length ? `Coaching prompts:\n${coachingPrompts.map((p: { content: string }) => `- ${p.content}`).join('\n')}` : '',
@@ -301,6 +317,7 @@ app.post('/api/bot/chat', async (c) => {
       `- Analysis type: ${analysisType ?? 'not stated'}`,
       trade?.bot_decisions?.[0] ? `- Bot's independent decision: ${trade.bot_decisions[0].position} (confidence: ${trade.bot_decisions[0].confidence_score})` : '',
       `\nCURRENT USER TRADES:\n${tradeContext}`,
+      preTradeContext || '',
       ragContext ? `\nRAG CONTEXT:\n${ragContext}` : '',
     ].filter(Boolean).join('\n');
 
