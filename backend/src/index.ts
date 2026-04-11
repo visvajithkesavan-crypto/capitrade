@@ -345,6 +345,13 @@ app.post('/api/bot/chat', async (c) => {
       `\nCURRENT USER TRADES:\n${tradeContext}`,
       preTradeContext || '',
       ragContext ? `\nRAG CONTEXT:\n${ragContext}` : '',
+      isFinalExchange ? `
+FINAL EXCHANGE INSTRUCTION — THIS OVERRIDES ALL OTHER RULES:
+This is the last message in the conversation. You MUST NOT ask any question. Do not end with a question mark. Instead:
+1. Write one sentence acknowledging what the user just said.
+2. Write a blank line.
+3. Write "Lesson: " followed by one specific insight about this user's reasoning pattern based on the full conversation above. Make it personal and concrete — reference what they actually said. Example format: "Lesson: You tend to trust news consensus without checking whether price momentum already reflects that news."
+Stop there. No question. No further commentary.` : '',
     ].filter(Boolean).join('\n');
 
     const chatHistory = [...history, { role: 'user' as const, content: userMessage }];
