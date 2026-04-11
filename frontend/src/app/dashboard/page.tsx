@@ -2185,24 +2185,29 @@ function TradesView({
   }
 
   const completeTrade = async (tradeId: string): Promise<void> => {
-    const res = await fetch(`${BACKEND_URL}/api/trades/${tradeId}/complete`, {
-      method: "PATCH",
-      headers: { "x-user-id": userId },
-    })
-    const json = await res.json() as {
-      success: boolean
-      error?: string
-      data?: { trade: ApiTrade; pnl: number; exitPrice: number }
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/trades/${tradeId}/complete`, {
+        method: "PATCH",
+        headers: { "x-user-id": userId },
+      })
+      const json = await res.json() as {
+        success: boolean
+        error?: string
+        data?: { trade: ApiTrade; pnl: number; exitPrice: number }
+      }
+      if (!json.success) {
+        throw new Error(json.error ?? "Failed to complete trade.")
+      }
+      const completedTrade = json.data?.trade ?? apiTrades.find((t) => t.id === tradeId) ?? null
+      setReflectionTrade(completedTrade)
+      setReflectionPnl(json.data?.pnl ?? 0)
+      setReflectionExitPrice(json.data?.exitPrice ?? 0)
+      setReflectionOpen(true)
+      onTradeSuccess()
+    } catch (err) {
+      console.error("completeTrade error:", err)
+      alert("Could not complete trade: " + (err instanceof Error ? err.message : "Unknown error"))
     }
-    if (!json.success) {
-      throw new Error(json.error ?? "Failed to complete trade.")
-    }
-    const originalTrade = apiTrades.find((t) => t.id === tradeId) ?? null
-    setReflectionTrade(originalTrade)
-    setReflectionPnl(json.data?.pnl ?? 0)
-    setReflectionExitPrice(json.data?.exitPrice ?? 0)
-    setReflectionOpen(true)
-    onTradeSuccess()
   }
 
   const handlePlaceTrade = () => {
