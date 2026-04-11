@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
-import { Bot, X, Check } from "lucide-react"
+import { Bot, X, Check, Send } from "lucide-react"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
 
@@ -21,6 +21,11 @@ export interface ReflectionTrade {
   bot_decisions: Array<{ position: string; confidence_score: number }>
 }
 
+interface Message {
+  role: "bot" | "user"
+  text: string
+}
+
 function getScenario(pnl: number, exitPrice: number, trade: ReflectionTrade): Scenario {
   const userRight = pnl > 0
   const botDecision = trade.bot_decisions[0]
@@ -35,43 +40,21 @@ function getScenario(pnl: number, exitPrice: number, trade: ReflectionTrade): Sc
   return "both_wrong"
 }
 
-const SCENARIO_CONFIG: Record<
-  Scenario,
-  { label: string; color: string; bgColor: string; borderColor: string; message: string }
-> = {
-  both_right: {
-    label: "Both Right",
-    color: "text-primary",
-    bgColor: "bg-primary/20",
-    borderColor: "border-primary/50",
-    message:
-      "We both called this correctly, but likely for different reasons. What was the key signal that convinced you to make this trade?",
-  },
-  user_right_bot_wrong: {
-    label: "You Were Right",
-    color: "text-primary",
-    bgColor: "bg-primary/20",
-    borderColor: "border-primary/50",
-    message:
-      "You spotted something my quantitative model missed. What was your key insight that drove this decision?",
-  },
-  user_wrong_bot_right: {
-    label: "Bot Was Right",
-    color: "text-warning",
-    bgColor: "bg-warning/20",
-    borderColor: "border-warning/50",
-    message:
-      "The market moved against you this time. Looking back, what data or signals might have changed your decision?",
-  },
-  both_wrong: {
-    label: "Both Wrong",
-    color: "text-destructive",
-    bgColor: "bg-destructive/20",
-    borderColor: "border-destructive/50",
-    message:
-      "Neither of us predicted this outcome. What do you think we both failed to account for in our analysis?",
-  },
+const OPENING_MESSAGE: Record<Scenario, string> = {
+  both_right: "We both called this correctly, but likely for different reasons. Before this trade you shared your reasoning with me — what do you think was the strongest part of that thinking?",
+  user_right_bot_wrong: "You spotted something my model missed. Looking back at the reasoning you shared before placing this trade, what gave you that conviction?",
+  user_wrong_bot_right: "The market moved against you this time. Before this trade you had a specific thesis — where do you think that thesis broke down?",
+  both_wrong: "Neither of us got this right. Before placing this trade you shared your thinking with me — what would you change about that reasoning now?",
 }
+
+const SCENARIO_CONFIG: Record<Scenario, { label: string; color: string; bgColor: string; borderColor: string }> = {
+  both_right: { label: "Both Right", color: "text-primary", bgColor: "bg-primary/20", borderColor: "border-primary/50" },
+  user_right_bot_wrong: { label: "You Were Right", color: "text-primary", bgColor: "bg-primary/20", borderColor: "border-primary/50" },
+  user_wrong_bot_right: { label: "Bot Was Right", color: "text-warning", bgColor: "bg-warning/20", borderColor: "border-warning/50" },
+  both_wrong: { label: "Both Wrong", color: "text-destructive", bgColor: "bg-destructive/20", borderColor: "border-destructive/50" },
+}
+
+const MAX_EXCHANGES = 3
 
 export default function PostTradeReflectionDialog({
   open,
@@ -88,19 +71,29 @@ export default function PostTradeReflectionDialog({
   exitPrice: number
   userId: string
 }) {
-  const [reflection, setReflection] = useState("")
-  const [botReply, setBotReply] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
-  const [phase, setPhase] = useState<"write" | "responded">("write")
+  const [exchangeCount, setExchangeCount] = useState(0)
+  const [finished, setFinished] = useState(false)
+  const [lessonCard, setLessonCard] = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (open) {
-      setReflection("")
-      setBotReply(null)
+    if (open && trade) {
+      const scenario = getScenario(pnl, exitPrice, trade)
+      setMessages([{ role: "bot", text: OPENING_MESSAGE[scenario] }])
+      setInput("")
       setSending(false)
-      setPhase("write")
+      setExchangeCount(0)
+      setFinished(false)
+      setLessonCard(null)
     }
   }, [open])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
 
   if (!open || !trade) return null
 
@@ -112,9 +105,22 @@ export default function PostTradeReflectionDialog({
     maximumFractionDigits: 2,
   })}`
 
+  const extractLesson = (text: string): string | null => {
+    const match = text.match(/Lesson:\s*(.+)/i)
+    return match ? match[1].trim() : null
+  }
+
   const handleSend = async () => {
-    if (!reflection.trim()) return
+    if (!input.trim() || sending) return
+    const userText = input.trim()
+    setInput("")
+    setMessages((prev) => [...prev, { role: "user", text: userText }])
     setSending(true)
+
+    const newCount = exchangeCount + 1
+    setExchangeCount(newCount)
+    const isFinal = newCount >= MAX_EXCHANGES
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/bot/chat`, {
         method: "POST",
@@ -125,20 +131,41 @@ export default function PostTradeReflectionDialog({
         body: JSON.stringify({
           tradeId: trade.id,
           phase: "post_trade",
-          userMessage: reflection,
-          messages: [],
+          userMessage: userText,
+          isFinalExchange: isFinal,
+          exchangeNumber: newCount,
+          scenario,
+          pnl,
+          messages: messages.map((m) => ({
+            role: m.role === "bot" ? "assistant" : "user",
+            content: m.text,
+          })),
         }),
       })
       const json = await res.json() as { success: boolean; data?: { reply: string } }
-      setBotReply(
-        json.success && json.data?.reply
-          ? json.data.reply
-          : "Thank you for your reflection. Every trade, win or lose, is a learning opportunity."
-      )
-      setPhase("responded")
+      const reply = json.success && json.data?.reply
+        ? json.data.reply
+        : isFinal
+          ? "Lesson: Every trade is a mirror. The goal is not to be right — it is to reason better each time."
+          : "Interesting — can you tell me more about what drove that thinking?"
+
+      setMessages((prev) => [...prev, { role: "bot", text: reply }])
+
+      if (isFinal) {
+        const lesson = extractLesson(reply)
+        if (lesson) setLessonCard(lesson)
+        setFinished(true)
+      }
     } catch {
-      setBotReply("Thank you for your reflection. Every trade, win or lose, is a learning opportunity.")
-      setPhase("responded")
+      const fallback = isFinal
+        ? "Lesson: Every trade is a mirror. The goal is not to be right — it is to reason better each time."
+        : "Interesting — can you tell me more about what drove that thinking?"
+      setMessages((prev) => [...prev, { role: "bot", text: fallback }])
+      if (isFinal) {
+        const lesson = extractLesson(fallback)
+        if (lesson) setLessonCard(lesson)
+        setFinished(true)
+      }
     } finally {
       setSending(false)
     }
@@ -146,117 +173,109 @@ export default function PostTradeReflectionDialog({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg mx-4 rounded-2xl bg-card border border-border overflow-hidden">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="relative z-10 w-full max-w-lg mx-4 rounded-2xl bg-card border border-border overflow-hidden flex flex-col" style={{ maxHeight: "85vh" }}>
+
         {/* Header */}
-        <div className="gradient-border-bottom px-6 py-4 flex items-center justify-between">
+        <div className="gradient-border-bottom px-6 py-4 flex items-center justify-between shrink-0">
           <div>
             <h2 className="font-semibold text-foreground">Post-Trade Reflection</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {trade.market} · {trade.position}
-            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">{trade.market} · {trade.position}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
-          >
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="p-6 space-y-5">
-          {/* Outcome row */}
-          <div className="flex items-center justify-between">
-            <span
-              className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${config.bgColor} ${config.color} border ${config.borderColor}`}
-            >
-              {config.label}
-            </span>
-            <span
-              className={`font-mono text-lg font-bold tabular-nums ${
-                pnlPositive ? "text-primary" : "text-destructive"
-              }`}
-            >
-              {pnlFormatted}
-            </span>
-          </div>
+        {/* Outcome row */}
+        <div className="px-6 pt-4 pb-2 flex items-center justify-between shrink-0">
+          <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold ${config.bgColor} ${config.color} border ${config.borderColor}`}>
+            {config.label}
+          </span>
+          <span className={`font-mono text-lg font-bold tabular-nums ${pnlPositive ? "text-primary" : "text-destructive"}`}>
+            {pnlFormatted}
+          </span>
+        </div>
 
-          {/* Bot opening message */}
-          <div className="bg-muted rounded-xl rounded-tl-sm border-l-2 border-primary/50 px-4 py-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20">
-                <Bot className="h-3.5 w-3.5 text-primary" />
-              </div>
-              <span className="text-xs font-medium text-primary">AI Advisor</span>
-            </div>
-            <p className="text-sm text-foreground leading-relaxed">{config.message}</p>
-          </div>
-
-          {/* Write phase: textarea + send button */}
-          {phase === "write" && (
-            <>
-              <div>
-                <label className="block text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                  Your Reflection
-                </label>
-                <textarea
-                  value={reflection}
-                  onChange={(e) => setReflection(e.target.value)}
-                  rows={4}
-                  placeholder="Share your thoughts on this trade..."
-                  className="w-full rounded-lg bg-muted border border-border px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none transition-colors"
-                />
-              </div>
-              <button
-                onClick={handleSend}
-                disabled={!reflection.trim() || sending}
-                className="w-full rounded-lg py-3 text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                style={{
-                  background:
-                    sending || !reflection.trim()
-                      ? "var(--muted)"
-                      : "linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)",
-                  color:
-                    sending || !reflection.trim() ? "var(--muted-foreground)" : "#080808",
-                  boxShadow:
-                    sending || !reflection.trim()
-                      ? "none"
-                      : "0 0 20px rgba(0, 255, 136, 0.25)",
-                }}
-              >
-                {sending ? (
-                  <>
-                    <span className="h-4 w-4 rounded-full border-2 border-current/30 border-t-current animate-spin" />
-                    Sending…
-                  </>
-                ) : (
-                  "Send to Coach"
-                )}
-              </button>
-            </>
-          )}
-
-          {/* Responded phase: bot follow-up + finish button */}
-          {phase === "responded" && botReply && (
-            <>
-              <div className="bg-muted rounded-xl rounded-tl-sm border-l-2 border-primary/50 px-4 py-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20">
-                    <Bot className="h-3.5 w-3.5 text-primary" />
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-6 py-2 space-y-3">
+          {messages.map((msg, i) => (
+            <div key={i}>
+              {msg.role === "bot" ? (
+                <div className="bg-muted rounded-xl rounded-tl-sm border-l-2 border-primary/50 px-4 py-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20">
+                      <Bot className="h-3.5 w-3.5 text-primary" />
+                    </div>
+                    <span className="text-xs font-medium text-primary">AI Advisor</span>
                   </div>
-                  <span className="text-xs font-medium text-primary">AI Advisor</span>
+                  <p className="text-sm text-foreground leading-relaxed">{msg.text}</p>
                 </div>
-                <p className="text-sm text-foreground leading-relaxed">{botReply}</p>
+              ) : (
+                <div className="flex justify-end">
+                  <div className="max-w-xs bg-primary/10 border border-primary/20 rounded-xl rounded-tr-sm px-4 py-3">
+                    <p className="text-sm text-foreground leading-relaxed">{msg.text}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {sending && (
+            <div className="bg-muted rounded-xl rounded-tl-sm border-l-2 border-primary/50 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/20">
+                  <Bot className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <span className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
               </div>
-              <button
-                onClick={onClose}
-                className="w-full rounded-lg py-3 text-sm font-bold flex items-center justify-center gap-2 bg-muted border border-border text-foreground hover:bg-muted/80 transition-colors"
-              >
-                <Check className="h-4 w-4" />
-                Finish Reflection
-              </button>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Lesson card */}
+        {lessonCard && (
+          <div className="mx-6 mb-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 shrink-0">
+            <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Your Lesson</p>
+            <p className="text-sm text-foreground leading-relaxed">{lessonCard}</p>
+          </div>
+        )}
+
+        {/* Input or Finish */}
+        <div className="px-6 py-4 border-t border-border shrink-0">
+          {!finished ? (
+            <>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                  placeholder="Share your thoughts..."
+                  disabled={sending}
+                  className="flex-1 rounded-lg bg-muted border border-border px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors disabled:opacity-50"
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || sending}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg transition-all disabled:opacity-40"
+                  style={{ background: "linear-gradient(135deg, #00ff88 0%, #00cc6a 100%)" }}
+                >
+                  <Send className="h-4 w-4 text-black" />
+                </button>
+              </div>
+              <p className="text-center text-xs text-muted-foreground mt-2">
+                {MAX_EXCHANGES - exchangeCount} question{MAX_EXCHANGES - exchangeCount !== 1 ? "s" : ""} remaining
+              </p>
             </>
+          ) : (
+            <button
+              onClick={onClose}
+              className="w-full rounded-lg py-3 text-sm font-bold flex items-center justify-center gap-2 bg-muted border border-border text-foreground hover:bg-muted/80 transition-colors"
+            >
+              <Check className="h-4 w-4" />
+              Finish Reflection
+            </button>
           )}
         </div>
       </div>

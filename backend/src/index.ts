@@ -257,12 +257,15 @@ app.post('/api/bot/chat', async (c) => {
       userMessage: string;
       confidenceLevel?: string;
       analysisType?: string;
+      isFinalExchange?: boolean;
+      exchangeNumber?: number;
+      scenario?: string;
       messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
       allTrades?: Array<{ market: string; position: string; amount: number | string; status: string }>;
     };
     console.log('=== PARSED allTrades ===', JSON.stringify(body.allTrades));
 
-    const { tradeId, phase, userMessage, confidenceLevel, analysisType } = body;
+    const { tradeId, phase, userMessage, confidenceLevel, analysisType, isFinalExchange, exchangeNumber, scenario } = body;
     const allTrades = body.allTrades;
     const tradeContext = Array.isArray(allTrades) && allTrades.length > 0
       ? allTrades.map((t: any) =>
@@ -307,6 +310,11 @@ app.post('/api/bot/chat', async (c) => {
       `- Reference the trade details below to make your responses relevant.`,
       `- Be encouraging but honest. Celebrate good reasoning, challenge weak reasoning.`,
       `- Never repeat a question that was already asked earlier in this conversation.`,
+      `- When isFinalExchange is true, do NOT ask another question. Instead end the conversation with:`,
+      `  Line 1: One sentence acknowledging what the user learned.`,
+      `  Line 2: Empty line.`,
+      `  Line 3: Start with "Lesson:" then one sentence — a specific, personal insight about THIS user's reasoning pattern based on everything discussed. Make it concrete, not generic.`,
+      `  Example: "Lesson: You tend to act on news signals without checking if price momentum confirms the story."`,
       ``,
       `CRITICAL RULE: Ask exactly ONE question per response. Never ask two questions in the same message. If you have multiple things to explore, pick the single most important question and ask only that. Keep responses under 3 sentences + 1 question. Be concise.`,
       ``,
@@ -330,6 +338,9 @@ app.post('/api/bot/chat', async (c) => {
       `- Position: ${trade?.position ?? 'Unknown'}`,
       `- Confidence level: ${confidenceLevel ?? 'not stated'}`,
       `- Analysis type: ${analysisType ?? 'not stated'}`,
+      `- Is final exchange: ${isFinalExchange ? 'YES — close the conversation with a Lesson, do not ask a question' : 'no'}`,
+      exchangeNumber !== undefined ? `- Exchange number: ${exchangeNumber}` : '',
+      scenario ? `- Outcome scenario: ${scenario}` : '',
       trade?.bot_decisions?.[0] ? `- Bot's independent decision: ${trade.bot_decisions[0].position} (confidence: ${trade.bot_decisions[0].confidence_score})` : '',
       `\nCURRENT USER TRADES:\n${tradeContext}`,
       preTradeContext || '',
