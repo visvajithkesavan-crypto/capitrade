@@ -2210,6 +2210,25 @@ function TradesView({
     }
   }
 
+  const testReflectionModal = () => {
+    const mockTrade: ApiTrade = {
+      id: "test-123",
+      market: "SPY",
+      position: "BUY",
+      amount: 1000,
+      entry_price: 450,
+      exit_price: 465,
+      status: "completed",
+      waiting_days: 3,
+      created_at: new Date().toISOString(),
+      bot_decisions: [{ position: "BUY", confidence_score: 0.75 }]
+    }
+    setReflectionTrade(mockTrade)
+    setReflectionPnl(150)
+    setReflectionExitPrice(465)
+    setReflectionOpen(true)
+  }
+
   const handlePlaceTrade = () => {
     if (!amount || parseFloat(amount) <= 0) {
       setErrorMsg("Please enter a valid amount.")
@@ -2317,12 +2336,20 @@ function TradesView({
           <p className="mt-3 text-sm text-destructive">{errorMsg}</p>
         )}
 
-        <button
-          onClick={handlePlaceTrade}
-          className="mt-4 w-full rounded-lg bg-primary text-primary-foreground py-3 font-semibold hover:bg-primary/90 transition-colors"
-        >
-          Place Trade
-        </button>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={handlePlaceTrade}
+            className="flex-1 rounded-lg bg-primary text-primary-foreground py-3 font-semibold hover:bg-primary/90 transition-colors"
+          >
+            Place Trade
+          </button>
+          <button
+            onClick={testReflectionModal}
+            className="text-xs bg-yellow-500 text-black px-2 py-1 rounded"
+          >
+            Test Modal
+          </button>
+        </div>
       </div>
 
       {/* Trade Table with Extended Columns */}
