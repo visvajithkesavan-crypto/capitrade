@@ -2210,6 +2210,25 @@ function TradesView({
     }
   }
 
+  const testReflectionModal = () => {
+    const mockTrade: ApiTrade = {
+      id: "test-123",
+      market: "Americas",
+      position: "BUY",
+      amount: 500,
+      entry_price: 580,
+      exit_price: 595,
+      status: "completed",
+      waiting_days: 3,
+      created_at: new Date().toISOString(),
+      bot_decisions: [{ position: "SELL", confidence_score: 0.65 }]
+    }
+    setReflectionTrade(mockTrade)
+    setReflectionPnl(75)
+    setReflectionExitPrice(595)
+    setReflectionOpen(true)
+  }
+
   const handlePlaceTrade = () => {
     if (!amount || parseFloat(amount) <= 0) {
       setErrorMsg("Please enter a valid amount.")
@@ -2224,7 +2243,15 @@ function TradesView({
     <div className="space-y-6">
       {/* New Trade Form */}
       <div className="rounded-xl bg-card border border-border p-6 fade-in">
-        <h3 className="font-semibold text-foreground mb-4">New Trade</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-foreground">New Trade</h3>
+          <button
+            onClick={testReflectionModal}
+            className="text-xs bg-yellow-500 text-black px-2 py-1 rounded"
+          >
+            Test Modal
+          </button>
+        </div>
         <div className="grid grid-cols-4 gap-4">
           {/* Market Select */}
           <div>
