@@ -18,7 +18,7 @@ export interface ReflectionTrade {
   status: string
   waiting_days?: number
   created_at: string
-  bot_decisions: Array<{ position: string; confidence_score: number }>
+  bot_decisions?: Array<{ position: string; confidence_score: number }>
 }
 
 interface Message {
@@ -28,7 +28,7 @@ interface Message {
 
 function getScenario(pnl: number, exitPrice: number, trade: ReflectionTrade): Scenario {
   const userRight = pnl > 0
-  const botDecision = trade.bot_decisions[0]
+  const botDecision = trade.bot_decisions?.[0]
   let botRight = false
   if (botDecision) {
     if (botDecision.position === "BUY" && exitPrice > trade.entry_price) botRight = true

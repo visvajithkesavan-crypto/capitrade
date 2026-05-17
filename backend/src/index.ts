@@ -215,7 +215,7 @@ app.patch('/api/trades/:id/complete', async (c) => {
 
   const { data: updated, error } = await supabase.from('trades')
     .update({ exit_price: exitPrice, status: 'completed', completed_at: new Date().toISOString() })
-    .eq('id', tradeId).select().single();
+    .eq('id', tradeId).select('*, bot_decisions(*)').single();
   if (error) return c.json({ success: false, error: error.message }, 500);
 
   const { data: profile } = await supabase.from('users').select('virtual_balance').eq('id', userId).single();
