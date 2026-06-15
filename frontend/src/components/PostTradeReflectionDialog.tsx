@@ -18,7 +18,14 @@ export interface ReflectionTrade {
   status: string
   waiting_days?: number
   created_at: string
-  bot_decisions?: Array<{ position: string; confidence_score: number }>
+  bot_decisions?: Array<{
+    position: string
+    confidence_score: number
+    technical_score?: number
+    volatility_score?: number
+    risk_reward_score?: number
+    reasoning?: string
+  }>
 }
 
 interface Message {
@@ -40,11 +47,23 @@ function getScenario(pnl: number, exitPrice: number, trade: ReflectionTrade): Sc
   return "both_wrong"
 }
 
-const OPENING_MESSAGE: Record<Scenario, string> = {
-  both_right: "We both called this correctly, but likely for different reasons. Before this trade you shared your reasoning with me — what do you think was the strongest part of that thinking?",
-  user_right_bot_wrong: "You spotted something my model missed. Looking back at the reasoning you shared before placing this trade, what gave you that conviction?",
-  user_wrong_bot_right: "The market moved against you this time. Before this trade you had a specific thesis — where do you think that thesis broke down?",
-  both_wrong: "Neither of us got this right. Before placing this trade you shared your thinking with me — what would you change about that reasoning now?",
+function getOpeningMessage(scenario: Scenario, trade: ReflectionTrade): string {
+  const bot = trade.bot_decisions?.[0]
+  const botPos = bot?.position ?? "HOLD"
+  const botConf = bot?.confidence_score != null
+    ? `${Math.round(bot.confidence_score * 100)}%`
+    : "unknown"
+
+  switch (scenario) {
+    case "user_right_bot_wrong":
+      return `My model predicted ${botPos} with ${botConf} confidence — you went the other way and won. Looking back at the reasoning you shared before this trade, what gave you that conviction?`
+    case "user_wrong_bot_right":
+      return `My model predicted ${botPos} with ${botConf} confidence — and the market confirmed that call. Before this trade you had a specific thesis. Where do you think it broke down?`
+    case "both_right":
+      return `We both called this correctly — I predicted ${botPos} with ${botConf} confidence, and you agreed. But we may have got there for different reasons. What was the core of your thinking?`
+    case "both_wrong":
+      return `Neither of us got this right. I predicted ${botPos} with ${botConf} confidence and was wrong — and so were you. Looking back at your pre-trade reasoning, what would you change?`
+  }
 }
 
 const SCENARIO_CONFIG: Record<Scenario, { label: string; color: string; bgColor: string; borderColor: string }> = {
@@ -82,7 +101,7 @@ export default function PostTradeReflectionDialog({
   useEffect(() => {
     if (open && trade) {
       const scenario = getScenario(pnl, exitPrice, trade)
-      setMessages([{ role: "bot", text: OPENING_MESSAGE[scenario] }])
+      setMessages([{ role: "bot", text: getOpeningMessage(scenario, trade) }])
       setInput("")
       setSending(false)
       setExchangeCount(0)
@@ -136,6 +155,7 @@ export default function PostTradeReflectionDialog({
           exchangeNumber: newCount,
           scenario,
           pnl,
+          botDecision: trade.bot_decisions?.[0] ?? null,
           messages: messages.map((m) => ({
             role: m.role === "bot" ? "assistant" : "user",
             content: m.text,

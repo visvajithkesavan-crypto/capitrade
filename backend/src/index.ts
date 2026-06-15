@@ -255,10 +255,18 @@ app.post('/api/bot/chat', async (c) => {
       scenario?: string;
       messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
       allTrades?: Array<{ market: string; position: string; amount: number | string; status: string }>;
+      botDecision?: {
+        position: string;
+        confidence_score: number;
+        technical_score?: number;
+        volatility_score?: number;
+        risk_reward_score?: number;
+        reasoning?: string;
+      } | null;
     };
     console.log('=== PARSED allTrades ===', JSON.stringify(body.allTrades));
 
-    const { tradeId, phase, userMessage, confidenceLevel, analysisType, isFinalExchange, exchangeNumber, scenario } = body;
+    const { tradeId, phase, userMessage, confidenceLevel, analysisType, isFinalExchange, exchangeNumber, scenario, botDecision } = body;
     const allTrades = body.allTrades;
     const tradeContext = Array.isArray(allTrades) && allTrades.length > 0
       ? allTrades.map((t: any) =>
@@ -334,7 +342,22 @@ app.post('/api/bot/chat', async (c) => {
       `- Is final exchange: ${isFinalExchange ? 'YES — close the conversation with a Lesson, do not ask a question' : 'no'}`,
       exchangeNumber !== undefined ? `- Exchange number: ${exchangeNumber}` : '',
       scenario ? `- Outcome scenario: ${scenario}` : '',
-      trade?.bot_decisions?.[0] ? `- Bot's independent decision: ${trade.bot_decisions[0].position} (confidence: ${trade.bot_decisions[0].confidence_score})` : '',
+      botDecision ? [
+        ``,
+        `BOT'S INDEPENDENT QUANT DECISION:`,
+        `- Position: ${botDecision.position}`,
+        `- Confidence: ${botDecision.confidence_score != null ? Math.round(botDecision.confidence_score * 100) + '%' : 'N/A'}`,
+        botDecision.technical_score   != null ? `- Technical score: ${Math.round(botDecision.technical_score * 100)}%`    : '',
+        botDecision.volatility_score  != null ? `- Volatility score: ${Math.round(botDecision.volatility_score * 100)}%`  : '',
+        botDecision.risk_reward_score != null ? `- Risk/reward score: ${Math.round(botDecision.risk_reward_score * 100)}%` : '',
+        botDecision.reasoning ? `- Bot reasoning summary: ${botDecision.reasoning}` : '',
+        ``,
+        `INSTRUCTION: The user has already been told what the bot predicted in the opening message.`,
+        `Throughout this conversation you MUST reference the bot's prediction when relevant.`,
+        `Compare the user's qualitative reasoning against the bot's quantitative signals.`,
+        `Do NOT hide what the bot thought — make the comparison explicit and educational.`,
+        `Example: "My technical score flagged weakness here, but you acted on a news signal instead — that divergence is worth exploring."`,
+      ].filter(Boolean).join('\n') : '',
       `\nCURRENT USER TRADES:\n${tradeContext}`,
       preTradeContext || '',
       ragContext ? `\nRAG CONTEXT:\n${ragContext}` : '',

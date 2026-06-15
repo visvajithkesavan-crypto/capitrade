@@ -140,7 +140,7 @@ interface ApiTrade {
   status: "active" | "completed"
   waiting_days?: number
   created_at: string
-  bot_decisions: Array<{ position: string; confidence_score: number }>
+  bot_decisions: Array<{ position: string; confidence_score: number; technical_score?: number; volatility_score?: number; risk_reward_score?: number; reasoning?: string }>
 }
 
 // ============================================================================
