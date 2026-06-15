@@ -140,6 +140,7 @@ interface ApiTrade {
   status: "active" | "completed"
   waiting_days?: number
   created_at: string
+  completed_at?: string | null
   bot_decisions: Array<{ position: string; confidence_score: number; technical_score?: number; volatility_score?: number; risk_reward_score?: number; reasoning?: string }>
 }
 
@@ -398,29 +399,62 @@ const metrics: Metric[] = [
   },
 ]
 
-const portfolioData = Array.from({ length: 30 }, (_, i) => {
-  const date = new Date()
-  date.setDate(date.getDate() - (29 - i))
-  return {
-    date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-    value: 1000000 + Math.random() * 300000 + i * 5000,
-  }
-})
+function computePortfolioData(trades: ApiTrade[], currentBalance: number) {
+  const STARTING_BALANCE = 10000
 
-const monthlyPnL = [
-  { month: "Apr", pnl: 12500 },
-  { month: "May", pnl: -8200 },
-  { month: "Jun", pnl: 28400 },
-  { month: "Jul", pnl: 15600 },
-  { month: "Aug", pnl: -3200 },
-  { month: "Sep", pnl: 42100 },
-  { month: "Oct", pnl: 18900 },
-  { month: "Nov", pnl: -12300 },
-  { month: "Dec", pnl: 31200 },
-  { month: "Jan", pnl: 22800 },
-  { month: "Feb", pnl: -5600 },
-  { month: "Mar", pnl: 35400 },
-]
+  const closedTrades = trades
+    .filter((t) => t.status === "completed" && t.exit_price && t.completed_at)
+    .sort((a, b) => new Date(a.completed_at!).getTime() - new Date(b.completed_at!).getTime())
+
+  let balance = STARTING_BALANCE
+  const points: { date: string; value: number }[] = [
+    {
+      date: closedTrades.length > 0
+        ? new Date(closedTrades[0].created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      value: STARTING_BALANCE,
+    },
+  ]
+
+  for (const trade of closedTrades) {
+    const pnl =
+      trade.position === "BUY"
+        ? ((trade.exit_price! - trade.entry_price) / trade.entry_price) * trade.amount
+        : trade.position === "SELL"
+        ? ((trade.entry_price - trade.exit_price!) / trade.entry_price) * trade.amount
+        : 0
+    balance += pnl
+    points.push({
+      date: new Date(trade.completed_at!).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      value: parseFloat(balance.toFixed(2)),
+    })
+  }
+
+  points.push({
+    date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+    value: currentBalance,
+  })
+
+  return points
+}
+
+function computeMonthlyPnL(trades: ApiTrade[]) {
+  const map: Record<string, number> = {}
+
+  for (const trade of trades) {
+    if (trade.status !== "completed" || !trade.exit_price || !trade.completed_at) continue
+    const pnl =
+      trade.position === "BUY"
+        ? ((trade.exit_price - trade.entry_price) / trade.entry_price) * trade.amount
+        : trade.position === "SELL"
+        ? ((trade.entry_price - trade.exit_price) / trade.entry_price) * trade.amount
+        : 0
+    const month = new Date(trade.completed_at).toLocaleDateString("en-US", { month: "short" })
+    map[month] = (map[month] ?? 0) + pnl
+  }
+
+  return Object.entries(map).map(([month, pnl]) => ({ month, pnl: parseFloat(pnl.toFixed(2)) }))
+}
 
 // ============================================================================
 // API HELPERS
@@ -2376,12 +2410,30 @@ function TradesView({
   )
 }
 
-function AnalyticsView({ liveMetrics, metricsLoading }: { liveMetrics: Metric[] | null; metricsLoading: boolean }) {
+function AnalyticsView({ liveMetrics, metricsLoading, apiTrades, liveBalance }: { liveMetrics: Metric[] | null; metricsLoading: boolean; apiTrades: ApiTrade[]; liveBalance: number }) {
   const displayMetrics = liveMetrics ?? metrics
-  const wins = 168
-  const losses = 79
+  const portfolioData = computePortfolioData(apiTrades, liveBalance)
+  const monthlyPnL = computeMonthlyPnL(apiTrades)
+  const wins = apiTrades.filter((t) => {
+    if (t.status !== "completed" || !t.exit_price) return false
+    const pnl = t.position === "BUY"
+      ? ((t.exit_price - t.entry_price) / t.entry_price) * t.amount
+      : t.position === "SELL"
+      ? ((t.entry_price - t.exit_price) / t.entry_price) * t.amount
+      : 0
+    return pnl > 0
+  }).length
+  const losses = apiTrades.filter((t) => {
+    if (t.status !== "completed" || !t.exit_price) return false
+    const pnl = t.position === "BUY"
+      ? ((t.exit_price - t.entry_price) / t.entry_price) * t.amount
+      : t.position === "SELL"
+      ? ((t.entry_price - t.exit_price) / t.entry_price) * t.amount
+      : 0
+    return pnl <= 0
+  }).length
   const totalTrades = wins + losses
-  const winPercent = (wins / totalTrades) * 100
+  const winPercent = totalTrades > 0 ? (wins / totalTrades) * 100 : 0
 
   return (
     <div className="space-y-6">
@@ -2425,7 +2477,7 @@ function AnalyticsView({ liveMetrics, metricsLoading }: { liveMetrics: Metric[] 
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: "#666666", fontSize: 11 }}
-                tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`}
+                tickFormatter={(val) => `$${val.toLocaleString("en-US", { maximumFractionDigits: 0 })}`}
               />
               <Tooltip
                 contentStyle={{
@@ -2454,6 +2506,11 @@ function AnalyticsView({ liveMetrics, metricsLoading }: { liveMetrics: Metric[] 
       {/* Monthly P&L Bar Chart */}
       <div className="rounded-xl bg-card border border-border p-6 fade-in">
         <h3 className="font-semibold text-foreground mb-4">Monthly P&L</h3>
+        {monthlyPnL.length === 0 ? (
+          <p className="text-muted-foreground text-sm text-center py-12">
+            No completed trades yet. Monthly P&amp;L will appear here after your first trade closes.
+          </p>
+        ) : (
         <div className="h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={monthlyPnL}>
@@ -2496,37 +2553,46 @@ function AnalyticsView({ liveMetrics, metricsLoading }: { liveMetrics: Metric[] 
             </BarChart>
           </ResponsiveContainer>
         </div>
+        )}
       </div>
 
       {/* Win/Loss Breakdown */}
       <div className="rounded-xl bg-card border border-border p-6 fade-in">
         <h3 className="font-semibold text-foreground mb-4">Win/Loss Breakdown</h3>
-        <div className="grid grid-cols-2 gap-6">
-          <div className="text-center">
-            <span className="block font-mono text-5xl font-bold text-primary tabular-nums">
-              {wins}
-            </span>
-            <span className="text-sm text-muted-foreground">Winning Trades</span>
-          </div>
-          <div className="text-center">
-            <span className="block font-mono text-5xl font-bold text-destructive tabular-nums">
-              {losses}
-            </span>
-            <span className="text-sm text-muted-foreground">Losing Trades</span>
-          </div>
-        </div>
-        <div className="mt-4">
-          <div className="flex justify-between text-sm mb-2">
-            <span className="text-muted-foreground">Win Rate</span>
-            <span className="font-mono tabular-nums text-foreground">{winPercent.toFixed(1)}%</span>
-          </div>
-          <div className="h-3 rounded-full bg-destructive/30 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-500"
-              style={{ width: `${winPercent}%` }}
-            />
-          </div>
-        </div>
+        {wins === 0 && losses === 0 ? (
+          <p className="text-muted-foreground text-sm text-center py-8">
+            Complete your first trade to see your win/loss breakdown.
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="text-center">
+                <span className="block font-mono text-5xl font-bold text-primary tabular-nums">
+                  {wins}
+                </span>
+                <span className="text-sm text-muted-foreground">Winning Trades</span>
+              </div>
+              <div className="text-center">
+                <span className="block font-mono text-5xl font-bold text-destructive tabular-nums">
+                  {losses}
+                </span>
+                <span className="text-sm text-muted-foreground">Losing Trades</span>
+              </div>
+            </div>
+            <div className="mt-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-muted-foreground">Win Rate</span>
+                <span className="font-mono tabular-nums text-foreground">{winPercent.toFixed(1)}%</span>
+              </div>
+              <div className="h-3 rounded-full bg-destructive/30 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${winPercent}%` }}
+                />
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -2787,7 +2853,7 @@ export default function DashboardPage() {
           />
         )
       case "analytics":
-        return <AnalyticsView liveMetrics={liveMetrics} metricsLoading={metricsLoading} />
+        return <AnalyticsView liveMetrics={liveMetrics} metricsLoading={metricsLoading} apiTrades={apiTrades} liveBalance={liveMetrics?.find((m) => m.label === "Virtual Balance")?.numericValue ?? 10000} />
       case "settings":
         return <SettingsView />
       default:
