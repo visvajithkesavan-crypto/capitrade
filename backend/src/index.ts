@@ -18,11 +18,16 @@ const app = new Hono();
 
 app.use('*', logger());
 app.use('*', cors({
-  origin: [
-    'https://capitrade1.vercel.app',
-    /https:\/\/capitrade1.*\.vercel\.app$/,
-    'http://localhost:3000'
-  ],
+  origin: (origin) => {
+    if (
+      origin === 'https://capitrade1.vercel.app' ||
+      origin === 'http://localhost:3000' ||
+      /https:\/\/capitrade1.*\.vercel\.app$/.test(origin)
+    ) {
+      return origin
+    }
+    return 'https://capitrade1.vercel.app'
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
   credentials: true,
