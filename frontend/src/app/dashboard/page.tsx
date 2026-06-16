@@ -1054,7 +1054,7 @@ function TradeTable({
   loading?: boolean
   onComplete?: (id: string) => void
 }) {
-  const colCount = showExtended ? 11 : 8
+  const colCount = showExtended ? 12 : 9
 
   return (
     <div className="rounded-xl bg-card border border-border overflow-hidden fade-in">
@@ -1070,6 +1070,9 @@ function TradeTable({
               </th>
               <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Position
+              </th>
+              <th className="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground py-3 px-4">
+                Bot
               </th>
               <th className="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Amount
@@ -1159,6 +1162,24 @@ function TradeTable({
                       <span className={`text-sm font-medium ${posClass}`}>
                         {t.position}
                       </span>
+                    </td>
+                    <td className="py-4 px-4">
+                      {t.bot_decisions?.[0] ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className={`text-xs font-semibold ${
+                            t.bot_decisions[0].position === "BUY" ? "text-primary" :
+                            t.bot_decisions[0].position === "SELL" ? "text-destructive" :
+                            "text-warning"
+                          }`}>
+                            {t.bot_decisions[0].position}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground tabular-nums">
+                            {Math.round((t.bot_decisions[0].confidence_score ?? 0) * 100)}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-5 py-4 text-right font-mono text-sm tabular-nums text-foreground">
                       ${t.amount.toLocaleString()}
@@ -1298,6 +1319,9 @@ function TradeTable({
                     >
                       {trade.position}
                     </span>
+                  </td>
+                  <td className="py-4 px-4">
+                    <span className="text-xs text-muted-foreground">—</span>
                   </td>
                   <td className="px-5 py-4 text-right font-mono text-sm tabular-nums text-foreground">
                     ${trade.amount.toLocaleString()}
@@ -2279,12 +2303,6 @@ function TradesView({
       <div className="rounded-xl bg-card border border-border p-6 fade-in">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-foreground">New Trade</h3>
-          <button
-            onClick={testReflectionModal}
-            className="text-xs bg-yellow-500 text-black px-2 py-1 rounded"
-          >
-            Test Modal
-          </button>
         </div>
         <div className="grid grid-cols-4 gap-4">
           {/* Market Select */}
@@ -2700,7 +2718,7 @@ function SettingsView() {
         <div className="space-y-3">
           {[
             { name: "Supabase", status: "Connected" },
-            { name: "HuggingFace", status: "Connected" },
+            { name: "Claude AI", status: "Connected" },
             { name: "Finnhub", status: "Connected" },
           ].map((api) => (
             <div
